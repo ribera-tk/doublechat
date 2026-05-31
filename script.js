@@ -156,26 +156,28 @@
   // =========================
   // AIログ（安定版）
   // =========================
+  let lastAIText = "";
+  let aiTimer = null;
+
   function observeAI() {
     const observer = new MutationObserver(() => {
-      const messages = document.querySelectorAll('[data-message-author-role="assistant"],.markdown');
-// 🔥ここにデバッグ用を追加！
-console.log("AI候補数:", messages.length);
+      // 🌟 余計な要素（.markdown）は干渉の元になるので assistant だけに絞ってシンプルに
+      const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
       if (!messages.length) return;
 
       const last = messages[messages.length - 1];
       const text = last.innerText?.trim();
+      if (!text || text.length < 20) return;
 
-     if (!text || text.length < 20) return;
-
-// 🔥 後ろだけ比較（重要）
-const tail = text.slice(-50);
-
-if (tail === lastAIText) return;
-
-lastAIText = tail;
-
-appendLog("AI: " + text);
+      // 🌟 AIが文字を書き足している最中は、タイマーを何度もリセットしてログ追加を「待て」します
+      clearTimeout(aiTimer);
+      aiTimer = setTimeout(() => {
+        // 文字の更新が「1.2秒間」完全に止まったら、喋り終わったと判定して1回だけログに流す
+        const tail = text.slice(-50);
+        if (tail === lastAIText) return;
+        lastAIText = tail;
+        appendLog("AI: " + text);
+      }, 1200); // ⏳ 1.2秒待機
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
