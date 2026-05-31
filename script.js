@@ -158,8 +158,9 @@
   // =========================
   function observeAI() {
     const observer = new MutationObserver(() => {
-      const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
-
+      const messages = document.querySelectorAll('[data-message-author-role="assistant"],.markdown');
+// 🔥ここにデバッグ用を追加！
+console.log("AI候補数:", messages.length);
       if (!messages.length) return;
 
       const last = messages[messages.length - 1];
@@ -232,6 +233,6 @@
   setTimeout(() => {
     createUI();
     observeAI();
-  }, 1000);
+}, 2000); // ⏳ 1000から2000に増やして、PCでも確実にDOMを掴めるようにします
 
 })();
