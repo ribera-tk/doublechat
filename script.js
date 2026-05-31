@@ -166,12 +166,16 @@ console.log("AI候補数:", messages.length);
       const last = messages[messages.length - 1];
       const text = last.innerText?.trim();
 
-      if (!text || text.length < 10) return;
-      if (text === lastAIText) return;
+     if (!text || text.length < 20) return;
 
-      lastAIText = text;
+// 🔥 後ろだけ比較（重要）
+const tail = text.slice(-50);
 
-      appendLog("AI: " + text);
+if (tail === lastAIText) return;
+
+lastAIText = tail;
+
+appendLog("AI: " + text);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
