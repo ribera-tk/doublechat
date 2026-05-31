@@ -153,35 +153,41 @@
     }
   }
 
-  // =========================
-  // AIログ（安定版）
-  // =========================
-  let lastAIText = "";
-  let aiTimer = null;
+// =========================
+// AIログ（リアルタイム上書き版）
+// =========================
+let lastAIElement = null;
+let lastAILogDiv = null;
 
-  function observeAI() {
-    const observer = new MutationObserver(() => {
-      // 🌟 余計な要素（.markdown）は干渉の元になるので assistant だけに絞ってシンプルに
-      const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
-      if (!messages.length) return;
+function observeAI() {
+  const observer = new MutationObserver(() => {
+    const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (!messages.length) return;
 
-      const last = messages[messages.length - 1];
-      const text = last.innerText?.trim();
-      if (!text || text.length < 20) return;
+    const last = messages[messages.length - 1];
+    const text = last.innerText?.trim();
+    if (!text) return;
 
-      // 🌟 AIが文字を書き足している最中は、タイマーを何度もリセットしてログ追加を「待て」します
-      clearTimeout(aiTimer);
-      aiTimer = setTimeout(() => {
-        // 文字の更新が「1.2秒間」完全に止まったら、喋り終わったと判定して1回だけログに流す
-        const tail = text.slice(-50);
-        if (tail === lastAIText) return;
-        lastAIText = tail;
-        appendLog("AI: " + text);
-      }, 1200); // ⏳ 1.2秒待機
-    });
+    const log = document.getElementById("dc-log");
+    if (!log) return;
 
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
+    if (last === lastAIElement && lastAILogDiv) {
+      // 同じ回答の続きなら、既存のログ行をリアルタイムに書き換える
+      lastAILogDiv.textContent = "AI: " + text;
+      log.scrollTop = log.scrollHeight;
+    } else {
+      // 新しい回答が始まったら、新しくログ行を作成する
+      lastAIElement = last;
+      lastAILogDiv = document.createElement("div");
+      lastAILogDiv.textContent = "AI: " + text;
+      lastAILogDiv.style.color = "#2ecc71";
+      log.appendChild(lastAILogDiv);
+      log.scrollTop = log.scrollHeight;
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+}
 
   // =========================
   // ドラッグ（Android対応）
