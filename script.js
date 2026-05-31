@@ -159,6 +159,9 @@
 let lastAIElement = null;
 let lastAILogDiv = null;
 
+// =========================
+// AIログ（テキスト判定・絶対増殖しない版）
+// =========================
 function observeAI() {
   const observer = new MutationObserver(() => {
     const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
@@ -171,23 +174,26 @@ function observeAI() {
     const log = document.getElementById("dc-log");
     if (!log) return;
 
-    if (last === lastAIElement && lastAILogDiv) {
-      // 同じ回答の続きなら、既存のログ行をリアルタイムに書き換える
-      lastAILogDiv.textContent = "AI: " + text;
-      log.scrollTop = log.scrollHeight;
+    // 🌟 OCログの一番最後の行を取得
+    const lastLine = log.lastElementChild;
+
+    // 🌟 最後の行が「AI:」で始まっていて、今のテキストの書き出しと同じなら「続き」とみなして上書き
+    if (lastLine && lastLine.textContent.startsWith("AI:") && text.startsWith(lastLine.textContent.replace("AI: ", "").slice(0, 10))) {
+      lastLine.textContent = "AI: " + text;
     } else {
-      // 新しい回答が始まったら、新しくログ行を作成する
-      lastAIElement = last;
-      lastAILogDiv = document.createElement("div");
-      lastAILogDiv.textContent = "AI: " + text;
-      lastAILogDiv.style.color = "#2ecc71";
-      log.appendChild(lastAILogDiv);
-      log.scrollTop = log.scrollHeight;
+      // 🌟 完全に新しい会話、または別の一文なら新しく行を追加
+      const line = document.createElement("div");
+      line.textContent = "AI: " + text;
+      line.style.color = "#2ecc71";
+      log.appendChild(line);
     }
+    
+    log.scrollTop = log.scrollHeight;
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
 }
+
 
   // =========================
   // ドラッグ（Android対応）
