@@ -4,20 +4,12 @@
 // @grant        none
 // ==/UserScript==
 
-const script1 = document.createElement("script");
-script1.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js";
-document.head.appendChild(script1);
-
-const script2 = document.createElement("script");
-script2.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js";
-document.head.appendChild(script2);
-
 (function () {
   'use strict';
 
   let isSending = false;
   let db = null; 
-  let aiSaveTimer = null; // 🔥 AIの書き込み爆発を防ぐタイマー
+  let aiSaveTimer = null; 
 
   // =========================
   // UI作成
@@ -30,7 +22,7 @@ document.head.appendChild(script2);
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v11.5
+        DoubleChat v11.7
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -117,7 +109,7 @@ document.head.appendChild(script2);
 
     if (text.startsWith("YOU:")) {
       line.style.color = "#0a84ff";
-      saveLog("user", text.replace("YOU: ", "")); // 🌟 自分が小窓から送ったログを保存
+      saveLog("user", text.replace("YOU: ", "")); 
     } else if (text.startsWith("AI:")) {
       line.style.color = "#2ecc71";
     }
@@ -127,22 +119,28 @@ document.head.appendChild(script2);
   }
 
   // =========================
-  // 🔥 Firebase保存 ＆ 画面デバッグ
+  // Firebase保存
   // =========================
   function saveLog(role, content) {
-    if (!db) return;
+    const log = document.getElementById("dc-log");
+    
+    if (!db) {
+      if (log) {
+        const line = document.createElement("div");
+        line.textContent = `⚠️ Firebase未接続のため未保存 [${role}]`;
+        line.style.color = "#ff9800";
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+      return;
+    }
+
     db.collection("chat_logs").add({
       role: role,
       content: content,
       timestamp: firebase.firestore.FieldValue.serverTimestamp()
     })
-    .then(() => {
-      console.log(`Firebase保存成功 [${role}]`);
-    })
     .catch(err => {
-      console.error("Firebase保存失敗:", err);
-      // 💥 失敗したら小窓のログに赤文字で理由を直接出す
-      const log = document.getElementById("dc-log");
       if (log) {
         const line = document.createElement("div");
         line.textContent = "⚠️ Firebase拒否: " + err.message;
@@ -202,7 +200,7 @@ document.head.appendChild(script2);
   }
 
   // =========================
-  // AI返答の常時監視（スマート保存追加）
+  // AI返答の常時監視
   // =========================
   let aiObserveTimer = null;
 
@@ -239,8 +237,6 @@ document.head.appendChild(script2);
           log.scrollTop = log.scrollHeight;
         }
 
-        // 🔥 AIが喋っている間はタイマーを毎回リセットし、
-        // 1.5秒間更新が止まったら「喋り終わった」と判定してFirebaseに送る！
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
           saveLog("ai", text);
@@ -299,26 +295,52 @@ document.head.appendChild(script2);
     document.addEventListener("touchend", () => dragging = false);
   }
 
-  // =============================
-  // 起動一本化
-  // =============================
+  // ===================================
+  // 🌟 動的ロード ＆ 可視化デバッグ
+  // ===================================
+  function initFirebaseSync() {
+    const log = document.getElementById("dc-log");
+
+    const s1 = document.createElement("script");
+    s1.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js";
+    
+    s1.onload = () => {
+      const s2 = document.createElement("script");
+      s2.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js";
+      
+      s2.onload = () => {
+        if (window.firebase) {
+          try {
+            firebase.initializeApp({
+              apiKey: "AIzaSyBKMqx3PtJnniu7IdtwaAEkFttkcikGrjQ",
+              authDomain: "doublechattabs.firebaseapp.com",
+              projectId: "doublechattabs"
+            });
+            db = firebase.firestore(); 
+            if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#2ecc71">🟢 Firebase 接続成功</div>');
+          } catch (e) {
+            if (log) log.insertAdjacentHTML('beforeend', `<div style="color:#ff4d4d">❌ 初期化エラー: ${e.message}</div>`);
+          }
+        }
+      };
+      s2.onerror = () => {
+        if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#ff4d4d">❌ Firestore読込失敗 (CSP制限)</div>');
+      };
+      document.head.appendChild(s2);
+    };
+
+    s1.onerror = () => {
+      if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#ff4d4d">❌ Firebase基盤読込失敗 (CSP制限)</div>');
+    };
+    document.head.appendChild(s1);
+  }
+
+  // 起動処理
   setTimeout(() => {
     createUI();
     observeAI();
-
-    if (!window.firebase) {
-      console.log("Firebase未ロード");
-      return;
-    }
-
-    firebase.initializeApp({
-      apiKey: "AIzaSyBKMqx3PtJnniu7IdtwaAEkFttkcikGrjQ",
-      authDomain: "doublechattabs.firebaseapp.com",
-      projectId: "doublechattabs"
-    });
-
-    db = firebase.firestore(); 
-    console.log("Firebase OK");
-  }, 2000);
+    initFirebaseSync(); // UIを作った直後にロード開始
+  }, 1000);
 
 })();
+
