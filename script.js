@@ -15,7 +15,7 @@
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat2
+        DoubleChat v3
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
