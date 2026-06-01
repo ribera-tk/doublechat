@@ -1,3 +1,10 @@
+const script1 = document.createElement("script");
+script1.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js";
+document.head.appendChild(script1);
+
+const script2 = document.createElement("script");
+script2.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js";
+document.head.appendChild(script2);
 (function () {
   'use strict';
 
@@ -15,7 +22,7 @@
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v3
+        DoubleChat v４
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -98,10 +105,31 @@
     } else {
       line.style.color = "#2ecc71";
     }
+function appendLog(text) {
+  const log = document.getElementById("dc-log");
 
+  const line = document.createElement("div");
+  line.textContent = text;
+  log.appendChild(line);
+
+  log.scrollTop = log.scrollHeight;
+
+  // 🔥 ここ追加
+  if (text.startsWith("YOU:")) {
+    saveLog("user", text);
+  } else if (text.startsWith("AI:")) {
+    saveLog("ai", text);
+  }
+}
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
+  // 🔥 ここ追加
+  if (text.startsWith("YOU:")) {
+    saveLog("user", text);
+  } else if (text.startsWith("AI:")) {
+    saveLog("ai", text);
   }
+}
 
   // =========================
   // 送信
@@ -259,12 +287,27 @@ if (text.length < 10) return;
     document.addEventListener("touchend", () => dragging = false);
   }
 
-  // =========================
-  // 起動
-  // =========================
-  setTimeout(() => {
-    createUI();
-    observeAI();
-}, 2000); // ⏳ 1000から2000に増やして、PCでも確実にDOMを掴めるようにします
+ // =============================
+// 起動（1つにスッキリ一本化！）
+// =============================
+setTimeout(() => {
+  // 1. UIとAI監視のスタート
+  createUI();
+  observeAI();
 
-})();
+  // 2. Firebaseの初期化も同じタイミングで実行
+  if (!window.firebase) {
+    console.log("Firebase未ロード");
+    return;
+  }
+
+  firebase.initializeApp({
+    apiKey: "AIzaSyBKMqx3PtJnniu7IdtwaAEkFttkcikGrjQ",
+    authDomain: "doublechattabs.firebaseapp.com",
+    projectId: "doublechattabs"
+  });
+
+  console.log("Firebase OK");
+}, 2000); // ⏳ 2秒待ってから全部まとめて起動します
+
+})(); // 🌟 スクリプト全体の閉じカッコを一番最後に持ってきます
