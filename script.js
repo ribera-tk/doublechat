@@ -29,7 +29,7 @@ document.head.appendChild(script2);
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v11.2
+        DoubleChat v11.3
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -61,6 +61,11 @@ document.head.appendChild(script2);
         justify-content: space-between;
         cursor: move;
         font-weight: bold;
+        user-select: none;
+      }
+      #dc-min {
+        cursor: pointer;
+        padding: 0 10px; /* 🌟 スマホでタップしやすいように少し広く */
       }
       #dc-body { padding: 10px; }
       #dc-log {
@@ -80,6 +85,25 @@ document.head.appendChild(script2);
     document.head.appendChild(style);
 
     document.getElementById("dc-send").onclick = send;
+
+    // 🌟 最小化ボタンのトグル処理を新設！
+    const minBtn = document.getElementById("dc-min");
+    const body = document.getElementById("dc-body");
+    
+    const toggleMin = (e) => {
+      e.stopPropagation(); // ドラッグイベントへの連鎖を絶対に止める！
+      if (body.style.display === "none") {
+        body.style.display = "block";
+        minBtn.textContent = "−";
+      } else {
+        body.style.display = "none";
+        minBtn.textContent = "＋";
+      }
+    };
+
+    minBtn.addEventListener("click", toggleMin);
+    minBtn.addEventListener("touchstart", toggleMin, { passive: true });
+
     enableDrag();
   }
 
@@ -102,7 +126,6 @@ document.head.appendChild(script2);
     }
 
     log.appendChild(line);
-    // 自分が送信したときは、問答無用で一番下にスクロール
     log.scrollTop = log.scrollHeight;
   }
 
@@ -116,7 +139,7 @@ document.head.appendChild(script2);
   }
 
   // =========================
-  // 送信処理（ChatGPTの入力欄を狙い撃ち）
+  // 送信処理
   // =========================
   async function send() {
     if (isSending) return;
@@ -134,7 +157,6 @@ document.head.appendChild(script2);
     inputEl.value = "";
 
     try {
-      // 🌟 ChatGPT側の入力欄（#prompt-textarea）をピンポイントで指定（誤爆防止）
       const target =
         document.getElementById("prompt-textarea") ||
         document.querySelector('main textarea') ||
@@ -155,7 +177,6 @@ document.head.appendChild(script2);
       target.dispatchEvent(new Event("input", { bubbles: true }));
       await new Promise(r => setTimeout(r, 150));
 
-      // 🌟 ChatGPT側の送信ボタン（mainの中のボタン）をピンポイントで指定
       const btn =
         document.querySelector('main button[data-testid*="send-button"]') ||
         document.querySelector('button[data-testid="send-button"]') ||
@@ -190,9 +211,7 @@ document.head.appendChild(script2);
         const log = document.getElementById("dc-log");
         if (!log) return;
 
-        // 🌟 判定：ユーザーが現在ログの最下部にいるかどうか（下から30px以内なら最下部とみなす）
         const isAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 30;
-
         const lastLine = log.lastElementChild;
 
         if (lastLine && lastLine.textContent.startsWith("AI:") && text.startsWith(lastLine.textContent.replace("AI: ", "").slice(0, 10))) {
@@ -204,7 +223,6 @@ document.head.appendChild(script2);
           log.appendChild(line);
         }
         
-        // 🌟 最下部にいた時だけ自動スクロール！上にスクロールして過去ログを見てる時は邪魔しない
         if (isAtBottom) {
           log.scrollTop = log.scrollHeight;
         }
@@ -215,7 +233,7 @@ document.head.appendChild(script2);
   }
 
   // =========================
-  // ドラッグ移動
+  // ドラッグ移動（最小化ボタンの誤爆防止ガード付）
   // =========================
   function enableDrag() {
     const box = document.getElementById("dc-root");
@@ -225,7 +243,9 @@ document.head.appendChild(script2);
     let offsetX = 0;
     let offsetY = 0;
 
+    // PC
     header.addEventListener("mousedown", (e) => {
+      if (e.target.id === "dc-min") return; // 🌟 最小化ボタンなら移動処理を完全スルー
       dragging = true;
       offsetX = e.clientX - box.offsetLeft;
       offsetY = e.clientY - box.offsetTop;
@@ -240,7 +260,9 @@ document.head.appendChild(script2);
 
     document.addEventListener("mouseup", () => dragging = false);
 
+    // Android
     header.addEventListener("touchstart", (e) => {
+      if (e.target.id === "dc-min") return; // 🌟 最小化ボタンなら移動処理を完全スルー
       dragging = true;
       const t = e.touches[0];
       offsetX = t.clientX - box.offsetLeft;
