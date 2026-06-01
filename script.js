@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DoubleChat
 // @match        https://chatgpt.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
@@ -27,7 +27,7 @@
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v11.8
+        DoubleChat v11.9
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -104,6 +104,223 @@
 
   // =========================
   // 画面ログ表示
+  // =========================
+  function appendLog(text) {
+    const log = document.getElementById("dc-log");
+    if (!log) return;
+
+    const line = document.createElement("div");
+    line.textContent = text;
+
+    if (text.startsWith("YOU:")) {
+      line.style.color = "#0a84ff";
+      saveLog("user", text.replace("YOU: ", "")); 
+    } else if (text.startsWith("AI:")) {
+      line.style.color = "#2ecc71";
+    }
+
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ===================================
+  // 🌟 モンキー特権通信（CSPを完全バイパス）
+  // ===================================
+  function saveLog(role, content) {
+    const log = document.getElementById("dc-log");
+    const url = `https://firestore.googleapis.com/v1/projects/${FB_CONFIG.projectId}/databases/(default)/documents/chat_logs?key=${FB_CONFIG.apiKey}`;
+    
+    const bodyData = {
+      fields: {
+        role: { stringValue: role },
+        content: { stringValue: content },
+        timestamp: { timestampValue: new Date().toISOString() }
+      }
+    };
+
+    // GM_xmlhttpRequest を使ってブラウザの制限を突破
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: url,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify(bodyData),
+      onload: function(res) {
+        if (res.status >= 200 && res.status < 300) {
+          console.log(`Firebase同期成功 [${role}]`);
+        } else {
+          showError("HTTPエラー: " + res.status);
+        }
+      },
+      onerror: function(err) {
+        showError("通信失敗");
+      }
+    });
+
+    function showError(msg) {
+      if (log) {
+        const line = document.createElement("div");
+        line.textContent = "⚠️ Firebase送信失敗: " + msg;
+        line.style.color = "#ff4d4d";
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+  }
+
+  // =========================
+  // 送信処理
+  // =========================
+  async function send() {
+    if (isSending) return;
+    isSending = true;
+
+    const inputEl = document.getElementById("dc-input");
+    const text = inputEl.value.trim();
+
+    if (!text) {
+      isSending = false;
+      return;
+    }
+
+    appendLog("YOU: " + text);
+    inputEl.value = "";
+
+    try {
+      const target =
+        document.getElementById("prompt-textarea") ||
+        document.querySelector('main textarea') ||
+        document.querySelector('[contenteditable="true"]');
+
+      if (!target) return;
+
+      target.focus();
+      await new Promise(r => setTimeout(r, 100));
+
+      document.execCommand("selectAll");
+      document.execCommand("delete");
+      document.execCommand("insertText", false, text);
+
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise(r => setTimeout(r, 150));
+
+      const btn =
+        document.querySelector('main button[data-testid*="send-button"]') ||
+        document.querySelector('button[data-testid="send-button"]') ||
+        document.querySelector('button[type="submit"]');
+
+      if (btn) btn.click();
+
+    } finally {
+      setTimeout(() => { isSending = false; }, 1200);
+    }
+  }
+
+  // =========================
+  // AI返答の常時監視
+  // =========================
+  let aiObserveTimer = null;
+
+  function observeAI() {
+    const observer = new MutationObserver(() => {
+      if (aiObserveTimer) return;
+
+      aiObserveTimer = setTimeout(() => {
+        aiObserveTimer = null;
+
+        const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
+        if (!messages.length) return;
+
+        const last = messages[messages.length - 1];
+        const text = last.textContent?.trim();
+        if (!text || text.length < 10) return; 
+
+        const log = document.getElementById("dc-log");
+        if (!log) return;
+
+        const isAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 30;
+        const lastLine = log.lastElementChild;
+
+        if (lastLine && lastLine.textContent.startsWith("AI:") && text.startsWith(lastLine.textContent.replace("AI: ", "").slice(0, 10))) {
+          lastLine.textContent = "AI: " + text;
+        } else {
+          const line = document.createElement("div");
+          line.textContent = "AI: " + text;
+          line.style.color = "#2ecc71";
+          log.appendChild(line);
+        }
+        
+        if (isAtBottom) {
+          log.scrollTop = log.scrollHeight;
+        }
+
+        clearTimeout(aiSaveTimer);
+        aiSaveTimer = setTimeout(() => {
+          saveLog("ai", text);
+        }, 1500);
+
+      }, 150);
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // =========================
+  // ドラッグ移動
+  // =========================
+  function enableDrag() {
+    const box = document.getElementById("dc-root");
+    const header = document.getElementById("dc-header");
+
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.id === "dc-min") return; 
+      dragging = true;
+      offsetX = e.clientX - box.offsetLeft;
+      offsetY = e.clientY - box.offsetTop;
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      box.style.left = (e.clientX - offsetX) + "px";
+      box.style.top = (e.clientY - offsetY) + "px";
+      box.style.right = "auto";
+    });
+
+    document.addEventListener("mouseup", () => dragging = false);
+
+    header.addEventListener("touchstart", (e) => {
+      if (e.target.id === "dc-min") return; 
+      dragging = true;
+      const t = e.touches[0];
+      offsetX = t.clientX - box.offsetLeft;
+      offsetY = t.clientY - box.offsetTop;
+    });
+
+    document.addEventListener("touchmove", (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      box.style.left = (t.clientX - offsetX) + "px";
+      box.style.top = (t.clientY - offsetY) + "px";
+      box.style.right = "auto";
+    }, { passive: false });
+
+    document.addEventListener("touchend", () => dragging = false);
+  }
+
+  // 起動処理
+  setTimeout(() => {
+    createUI();
+    observeAI();
+    
+    const log = document.getElementById("dc-log");
+    if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#2ecc71">🔵 Firebase(REST) モード準備完了</div>');
+  }, 1000);
+
+})();
   // =========================
   function appendLog(text) {
     const log = document.getElementById("dc-log");
