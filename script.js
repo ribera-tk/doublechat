@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DoubleChat
 // @match        https://chatgpt.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
@@ -10,7 +10,7 @@
   let isSending = false;
   let aiSaveTimer = null;
 
-  // 🌟 下記で作成するGASの「ウェブアプリURL」をここに貼り付けてください
+  // 🌟 JemyさんのGASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
 
   function createUI() {
@@ -19,10 +19,7 @@
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">
-        DoubleChat v12.2
-        <span id="dc-min">-</span>
-      </div>
+      <div id="dc-header">DoubleChat v12.3 <span id="dc-min">-</span></div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
@@ -47,92 +44,65 @@
 
     const minBtn = document.getElementById("dc-min");
     const body = document.getElementById("dc-body");
-    
     const toggleMin = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (body.style.display === "none") {
-        body.style.display = "block";
-        minBtn.textContent = "-";
-      } else {
-        body.style.display = "none";
-        minBtn.textContent = "+";
-      }
+      e.preventDefault(); e.stopPropagation();
+      if (body.style.display === "none") { body.style.display = "block"; minBtn.textContent = "-"; }
+      else { body.style.display = "none"; minBtn.textContent = "+"; }
     };
-
     minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
-
     enableDrag();
   }
 
   function appendLog(text) {
     const log = document.getElementById("dc-log");
     if (!log) return;
-
     const line = document.createElement("div");
     line.textContent = text;
-
     if (text.startsWith("YOU:")) {
       line.style.color = "#0a84ff";
       saveLog("user", text.replace("YOU: ", ""));
-    } else if (text.startsWith("AI:")) {
-      line.style.color = "#2ecc71";
     }
-
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
   }
 
-  // 🌟 セキュリティ(CSP)を100%無条件で突破する隠しiframe方式
   function saveLog(role, content) {
-    if (!GAS_URL || GAS_URL.includes("ここに")) return;
-
-    let iframe = document.getElementById("dc-beacon");
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.id = "dc-beacon";
-      iframe.style.display = "none";
-      document.body.appendChild(iframe);
-    }
+    if (!GAS_URL || GAS_URL.includes("ここに") || typeof GM_xmlhttpRequest === "undefined") return;
     
-    // バックグラウンドでGASへデータを引き渡す（ブラウザのfetch制限を受けません）
-    iframe.src = GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now();
+    // 拡張機能の特権で強引にセキュリティ制限をスルーしてGASへ叩き込みます
+    GM_xmlhttpRequest({
+      method: "GET",
+      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
+      onload: function(res) { console.log("Log saved:", res.responseText); }
+    });
   }
 
   async function send() {
     if (isSending) return;
     isSending = true;
-
     const inputEl = document.getElementById("dc-input");
     const text = inputEl.value.trim();
     if (!text) { isSending = false; return; }
-
     appendLog("YOU: " + text);
     inputEl.value = "";
-
     try {
       const target = document.getElementById("prompt-textarea") || document.querySelector("main textarea") || document.querySelector("[contenteditable='true']");
       if (!target) return;
-
       target.focus();
       await new Promise(r => setTimeout(r, 100));
-
       document.execCommand("selectAll");
       document.execCommand("delete");
       document.execCommand("insertText", false, text);
-
       target.dispatchEvent(new Event("input", { bubbles: true }));
       await new Promise(r => setTimeout(r, 150));
-
-      const btn = document.querySelector("main button[data-testid*='send-button']") || document.querySelector("button[data-testid='send-button']") || document.querySelector("button[type='submit']");
+      const btn = document.querySelector("main button[data-testid*='send-button']") || document.querySelector("button[data-testid='send-button']");
       if (btn) btn.click();
     } finally {
       setTimeout(() => { isSending = false; }, 1200);
     }
   }
 
-  let aiObserveTimer = null;
   function observeAI() {
     const observer = new MutationObserver(() => {
       if (aiObserveTimer) return;
@@ -140,17 +110,13 @@
         aiObserveTimer = null;
         const messages = document.querySelectorAll("[data-message-author-role='assistant']");
         if (!messages.length) return;
-
         const last = messages[messages.length - 1];
         const text = last.textContent?.trim();
         if (!text || text.length < 10) return;
-
         const log = document.getElementById("dc-log");
         if (!log) return;
-
         const isAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 30;
         const lastLine = log.lastElementChild;
-
         if (lastLine && lastLine.textContent.startsWith("AI:") && text.startsWith(lastLine.textContent.replace("AI: ", "").slice(0, 10))) {
           lastLine.textContent = "AI: " + text;
         } else {
@@ -159,9 +125,7 @@
           line.style.color = "#2ecc71";
           log.appendChild(line);
         }
-
         if (isAtBottom) log.scrollTop = log.scrollHeight;
-
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => { saveLog("ai", text); }, 1500);
       }, 150);
@@ -183,10 +147,9 @@
 
   function bootstrap() {
     if (!document.body) { setTimeout(bootstrap, 200); return; }
-    createUI();
-    observeAI();
+    createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v12.0 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v12.3 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
