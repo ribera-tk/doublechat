@@ -20,7 +20,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v12.0
+        DoubleChat v12.1
         <span id="dc-min">-</span>
       </div>
       <div id="dc-body">
