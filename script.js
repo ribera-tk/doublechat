@@ -20,7 +20,7 @@
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">DoubleChat v13.1 <span id="dc-min">-</span></div>
+      <div id="dc-header">DoubleChat v13.2 <span id="dc-min">-</span></div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
@@ -78,30 +78,35 @@
     });
   }
 
-  // 🌟 Geminiを呼び出す関数
+ // 🌟 エラー原因あぶり出し版：Geminiを呼び出す関数
   function callGemini(text, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") return;
 
-    // 日本語 ＆ 3行以内のコンパクト化指示を自動合体
     const customPrompt = text + "\n\n【制約】必ず日本語で、3行程度の簡潔な文章で回答してください。無駄な解説や挨拶は省いてください。";
 
     GM_xmlhttpRequest({
       method: "POST",
-      url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q",
+      url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q", // 💡 モデル名を2.0に調整
       headers: { "Content-Type": "application/json" },
       data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
       onload: function (res) {
         try {
           const data = JSON.parse(res.responseText);
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Geminiの応答エラーだぜ";
+          
+          // 💡 Googleからのエラー理由を直接ログに叩き込む
+          if (data.error) {
+            callback("Googleエラー: " + data.error.message);
+            return;
+          }
+          
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "応答が空っぽだぜ";
           callback(reply);
         } catch(e) {
-          callback("パースエラーだぜ");
+          callback("パースエラー status:" + res.status);
         }
       }
     });
   }
-
   async function send() {
     if (isSending) return;
     isSending = true;
@@ -182,7 +187,7 @@
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.1 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.2 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
