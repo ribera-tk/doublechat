@@ -17,6 +17,7 @@ document.head.appendChild(script2);
 
   let isSending = false;
   let db = null; 
+  let aiSaveTimer = null; // 🔥 AIの書き込み爆発を防ぐタイマー
 
   // =========================
   // UI作成
@@ -29,7 +30,7 @@ document.head.appendChild(script2);
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v11.４
+        DoubleChat v11.5
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -63,10 +64,7 @@ document.head.appendChild(script2);
         font-weight: bold;
         user-select: none;
       }
-      #dc-min {
-        cursor: pointer;
-        padding: 0 10px; /* 🌟 スマホでタップしやすいように少し広く */
-      }
+      #dc-min { cursor: pointer; padding: 0 10px; }
       #dc-body { padding: 10px; }
       #dc-log {
         display: flex;
@@ -86,12 +84,12 @@ document.head.appendChild(script2);
 
     document.getElementById("dc-send").onclick = send;
 
-    // 🌟 最小化ボタンのトグル処理を新設！
     const minBtn = document.getElementById("dc-min");
     const body = document.getElementById("dc-body");
     
     const toggleMin = (e) => {
-      e.stopPropagation(); // ドラッグイベントへの連鎖を絶対に止める！
+      e.preventDefault(); 
+      e.stopPropagation(); 
       if (body.style.display === "none") {
         body.style.display = "block";
         minBtn.textContent = "−";
@@ -101,35 +99,14 @@ document.head.appendChild(script2);
       }
     };
 
+    minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
-    minBtn.addEventListener("touchstart", toggleMin, { passive: true });
 
     enableDrag();
   }
-  // 🌟 スマホ画面にエラーを吐き出すデバッグ版 saveLog
-  function saveLog(role, content) {
-    if (!db) return;
-    db.collection("chat_logs").add({
-      role: role,
-      content: content,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(err => {
-      console.error("Firebase保存失敗:", err);
-      
-      // 💥 追加：スマホのログ画面に赤文字でエラーを表示する
-      const log = document.getElementById("dc-log");
-      if (log) {
-        const line = document.createElement("div");
-        line.textContent = "⚠️ Firebase拒否: " + err.message;
-        line.style.color = "#ff4d4d";
-        log.appendChild(line);
-        log.scrollTop = log.scrollHeight;
-      }
-    });
-  }
 
   // =========================
-  // 画面ログ表示 ＆ Firebase保存
+  // 画面ログ表示
   // =========================
   function appendLog(text) {
     const log = document.getElementById("dc-log");
@@ -140,23 +117,40 @@ document.head.appendChild(script2);
 
     if (text.startsWith("YOU:")) {
       line.style.color = "#0a84ff";
-      saveLog("user", text.replace("YOU: ", "")); 
+      saveLog("user", text.replace("YOU: ", "")); // 🌟 自分が小窓から送ったログを保存
     } else if (text.startsWith("AI:")) {
       line.style.color = "#2ecc71";
-      saveLog("ai", text.replace("AI: ", "")); 
     }
 
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
   }
 
+  // =========================
+  // 🔥 Firebase保存 ＆ 画面デバッグ
+  // =========================
   function saveLog(role, content) {
     if (!db) return;
     db.collection("chat_logs").add({
       role: role,
       content: content,
       timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(err => console.error("Firebase保存失敗:", err));
+    })
+    .then(() => {
+      console.log(`Firebase保存成功 [${role}]`);
+    })
+    .catch(err => {
+      console.error("Firebase保存失敗:", err);
+      // 💥 失敗したら小窓のログに赤文字で理由を直接出す
+      const log = document.getElementById("dc-log");
+      if (log) {
+        const line = document.createElement("div");
+        line.textContent = "⚠️ Firebase拒否: " + err.message;
+        line.style.color = "#ff4d4d";
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+    });
   }
 
   // =========================
@@ -183,10 +177,7 @@ document.head.appendChild(script2);
         document.querySelector('main textarea') ||
         document.querySelector('[contenteditable="true"]');
 
-      if (!target) {
-        console.log("ChatGPTの入力欄が見つかりません");
-        return;
-      }
+      if (!target) return;
 
       target.focus();
       await new Promise(r => setTimeout(r, 100));
@@ -211,7 +202,7 @@ document.head.appendChild(script2);
   }
 
   // =========================
-  // AI返答の常時監視（スクロール配慮版）
+  // AI返答の常時監視（スマート保存追加）
   // =========================
   let aiObserveTimer = null;
 
@@ -247,6 +238,14 @@ document.head.appendChild(script2);
         if (isAtBottom) {
           log.scrollTop = log.scrollHeight;
         }
+
+        // 🔥 AIが喋っている間はタイマーを毎回リセットし、
+        // 1.5秒間更新が止まったら「喋り終わった」と判定してFirebaseに送る！
+        clearTimeout(aiSaveTimer);
+        aiSaveTimer = setTimeout(() => {
+          saveLog("ai", text);
+        }, 1500);
+
       }, 150);
     });
 
@@ -254,7 +253,7 @@ document.head.appendChild(script2);
   }
 
   // =========================
-  // ドラッグ移動（最小化ボタンの誤爆防止ガード付）
+  // ドラッグ移動
   // =========================
   function enableDrag() {
     const box = document.getElementById("dc-root");
@@ -264,9 +263,8 @@ document.head.appendChild(script2);
     let offsetX = 0;
     let offsetY = 0;
 
-    // PC
     header.addEventListener("mousedown", (e) => {
-      if (e.target.id === "dc-min") return; // 🌟 最小化ボタンなら移動処理を完全スルー
+      if (e.target.id === "dc-min") return; 
       dragging = true;
       offsetX = e.clientX - box.offsetLeft;
       offsetY = e.clientY - box.offsetTop;
@@ -281,9 +279,8 @@ document.head.appendChild(script2);
 
     document.addEventListener("mouseup", () => dragging = false);
 
-    // Android
     header.addEventListener("touchstart", (e) => {
-      if (e.target.id === "dc-min") return; // 🌟 最小化ボタンなら移動処理を完全スルー
+      if (e.target.id === "dc-min") return; 
       dragging = true;
       const t = e.touches[0];
       offsetX = t.clientX - box.offsetLeft;
@@ -325,4 +322,3 @@ document.head.appendChild(script2);
   }, 2000);
 
 })();
-
