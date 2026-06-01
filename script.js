@@ -8,8 +8,13 @@
   'use strict';
 
   let isSending = false;
-  let db = null; 
   let aiSaveTimer = null; 
+
+  // Firebase接続情報
+  const FB_CONFIG = {
+    apiKey: "AIzaSyBKMqx3PtJnniu7IdtwaAEkFttkcikGrjQ",
+    projectId: "doublechattabs"
+  };
 
   // =========================
   // UI作成
@@ -22,7 +27,7 @@
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v11.7
+        DoubleChat v11.8
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -118,32 +123,39 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  // =========================
-  // Firebase保存
-  // =========================
+  // ===================================
+  // 🌟 ライブラリ不要：直接データを送信する機能
+  // ===================================
   function saveLog(role, content) {
     const log = document.getElementById("dc-log");
     
-    if (!db) {
-      if (log) {
-        const line = document.createElement("div");
-        line.textContent = `⚠️ Firebase未接続のため未保存 [${role}]`;
-        line.style.color = "#ff9800";
-        log.appendChild(line);
-        log.scrollTop = log.scrollHeight;
+    // FirebaseのAPI窓口のURL
+    const url = `https://firestore.googleapis.com/v1/projects/${FB_CONFIG.projectId}/databases/(default)/documents/chat_logs?key=${FB_CONFIG.apiKey}`;
+    
+    // Firestoreが受け取れるデータ形式に変形
+    const bodyData = {
+      fields: {
+        role: { stringValue: role },
+        content: { stringValue: content },
+        timestamp: { timestampValue: new Date().toISOString() }
       }
-      return;
-    }
+    };
 
-    db.collection("chat_logs").add({
-      role: role,
-      content: content,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    // 直接送信
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(bodyData)
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("HTTPエラー: " + res.status);
+      console.log(`Firebase同期成功 [${role}]`);
     })
     .catch(err => {
+      console.error("Firebase送信失敗:", err);
       if (log) {
         const line = document.createElement("div");
-        line.textContent = "⚠️ Firebase拒否: " + err.message;
+        line.textContent = "⚠️ Firebase送信失敗: " + err.message;
         line.style.color = "#ff4d4d";
         log.appendChild(line);
         log.scrollTop = log.scrollHeight;
@@ -295,51 +307,13 @@
     document.addEventListener("touchend", () => dragging = false);
   }
 
-  // ===================================
-  // 🌟 動的ロード ＆ 可視化デバッグ
-  // ===================================
-  function initFirebaseSync() {
-    const log = document.getElementById("dc-log");
-
-    const s1 = document.createElement("script");
-    s1.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js";
-    
-    s1.onload = () => {
-      const s2 = document.createElement("script");
-      s2.src = "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js";
-      
-      s2.onload = () => {
-        if (window.firebase) {
-          try {
-            firebase.initializeApp({
-              apiKey: "AIzaSyBKMqx3PtJnniu7IdtwaAEkFttkcikGrjQ",
-              authDomain: "doublechattabs.firebaseapp.com",
-              projectId: "doublechattabs"
-            });
-            db = firebase.firestore(); 
-            if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#2ecc71">🟢 Firebase 接続成功</div>');
-          } catch (e) {
-            if (log) log.insertAdjacentHTML('beforeend', `<div style="color:#ff4d4d">❌ 初期化エラー: ${e.message}</div>`);
-          }
-        }
-      };
-      s2.onerror = () => {
-        if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#ff4d4d">❌ Firestore読込失敗 (CSP制限)</div>');
-      };
-      document.head.appendChild(s2);
-    };
-
-    s1.onerror = () => {
-      if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#ff4d4d">❌ Firebase基盤読込失敗 (CSP制限)</div>');
-    };
-    document.head.appendChild(s1);
-  }
-
   // 起動処理
   setTimeout(() => {
     createUI();
     observeAI();
-    initFirebaseSync(); // UIを作った直後にロード開始
+    
+    const log = document.getElementById("dc-log");
+    if (log) log.insertAdjacentHTML('beforeend', '<div style="color:#2ecc71">🔵 Firebase(REST) モード準備完了</div>');
   }, 1000);
 
 })();
