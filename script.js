@@ -20,7 +20,7 @@ let aiObserveTimer = null; // ←追加
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">DoubleChat v12.4 <span id="dc-min">-</span></div>
+      <div id="dc-header">DoubleChat v13 <span id="dc-min">-</span></div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
@@ -78,8 +78,27 @@ let aiObserveTimer = null; // ←追加
       onload: function(res) { console.log("Log saved:", res.responseText); }
     });
   }
+// 🌟 Geminiを呼び出す関数（saveLogの下に追記）
+  function callGemini(text, callback) {
+    if (typeof GM_xmlhttpRequest === "undefined") return;
 
-  async function send() {
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q",
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ contents: [{ parts: [{ text: text }] }] }),
+      onload: function (res) {
+        try {
+          const data = JSON.parse(res.responseText);
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Geminiの応答エラーだぜ";
+          callback(reply);
+        } catch(e) {
+          callback("パースエラーだぜ");
+        }
+      }
+    });
+  }
+ async function send() {
     if (isSending) return;
     isSending = true;
     const inputEl = document.getElementById("dc-input");
@@ -87,6 +106,13 @@ let aiObserveTimer = null; // ←追加
     if (!text) { isSending = false; return; }
     appendLog("YOU: " + text);
     inputEl.value = "";
+
+    // 🌟 ここでChatGPTの送信と同時にGeminiも叩く！
+    callGemini(text, (reply) => {
+      appendLog("Gemini: " + reply);
+      saveLog("gemini", reply); // スプレッドシートにも保存
+    });
+
     try {
       const target = document.getElementById("prompt-textarea") || document.querySelector("main textarea") || document.querySelector("[contenteditable='true']");
       if (!target) return;
@@ -150,7 +176,7 @@ let aiObserveTimer = null; // ←追加
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v12.3 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
