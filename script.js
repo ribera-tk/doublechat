@@ -11,7 +11,7 @@
   let aiSaveTimer = null;
 
   // 🌟 下記で作成するGASの「ウェブアプリURL」をここに貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbw5gKWmb6ayTOXMPLY-YARv3mSBD115-01jRduWABIN0GoPl7xSSPrh0WitANDYUqo6LQ/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
 
   function createUI() {
     if (document.getElementById("dc-root")) return;
@@ -20,7 +20,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v12.1
+        DoubleChat v12.2
         <span id="dc-min">-</span>
       </div>
       <div id="dc-body">
