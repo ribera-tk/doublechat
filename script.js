@@ -182,7 +182,8 @@ function observeAI() {
       // 🌟 激重の innerText を完全に廃止し、画面再計算の起きない超軽量な textContent に変更
       const text = last.textContent?.trim();
       if (!text) return;
-
+// 空振り防止
+if (text.length < 10) return;
       const log = document.getElementById("dc-log");
       if (!log) return;
 
