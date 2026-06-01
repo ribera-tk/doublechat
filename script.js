@@ -9,6 +9,7 @@
 
   let isSending = false;
   let aiSaveTimer = null;
+let aiObserveTimer = null; // ←追加
 
   // 🌟 JemyさんのGASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
@@ -19,7 +20,7 @@
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">DoubleChat v12.3 <span id="dc-min">-</span></div>
+      <div id="dc-header">DoubleChat v12.4 <span id="dc-min">-</span></div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
