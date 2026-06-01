@@ -9,7 +9,7 @@
 
   let isSending = false;
   let aiSaveTimer = null;
-let aiObserveTimer = null; // ←追加
+  let aiObserveTimer = null;
 
   // 🌟 JemyさんのGASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
@@ -20,7 +20,7 @@ let aiObserveTimer = null; // ←追加
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">DoubleChat v13 <span id="dc-min">-</span></div>
+      <div id="dc-header">DoubleChat v13.1 <span id="dc-min">-</span></div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
@@ -71,22 +71,25 @@ let aiObserveTimer = null; // ←追加
   function saveLog(role, content) {
     if (!GAS_URL || GAS_URL.includes("ここに") || typeof GM_xmlhttpRequest === "undefined") return;
     
-    // 拡張機能の特権で強引にセキュリティ制限をスルーしてGASへ叩き込みます
     GM_xmlhttpRequest({
       method: "GET",
       url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
       onload: function(res) { console.log("Log saved:", res.responseText); }
     });
   }
-// 🌟 Geminiを呼び出す関数（saveLogの下に追記）
+
+  // 🌟 Geminiを呼び出す関数
   function callGemini(text, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") return;
+
+    // 日本語 ＆ 3行以内のコンパクト化指示を自動合体
+    const customPrompt = text + "\n\n【制約】必ず日本語で、3行程度の簡潔な文章で回答してください。無駄な解説や挨拶は省いてください。";
 
     GM_xmlhttpRequest({
       method: "POST",
       url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q",
       headers: { "Content-Type": "application/json" },
-      data: JSON.stringify({ contents: [{ parts: [{ text: text }] }] }),
+      data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
       onload: function (res) {
         try {
           const data = JSON.parse(res.responseText);
@@ -98,7 +101,8 @@ let aiObserveTimer = null; // ←追加
       }
     });
   }
- async function send() {
+
+  async function send() {
     if (isSending) return;
     isSending = true;
     const inputEl = document.getElementById("dc-input");
@@ -107,10 +111,10 @@ let aiObserveTimer = null; // ←追加
     appendLog("YOU: " + text);
     inputEl.value = "";
 
-    // 🌟 ここでChatGPTの送信と同時にGeminiも叩く！
+    // ChatGPTの送信と同時にGeminiも叩く！
     callGemini(text, (reply) => {
       appendLog("Gemini: " + reply);
-      saveLog("gemini", reply); // スプレッドシートにも保存
+      saveLog("ジェミー", reply); // 🌟 「gemini」から「ジェミー」に変更
     });
 
     try {
@@ -154,7 +158,9 @@ let aiObserveTimer = null; // ←追加
         }
         if (isAtBottom) log.scrollTop = log.scrollHeight;
         clearTimeout(aiSaveTimer);
-        aiSaveTimer = setTimeout(() => { saveLog("ai", text); }, 1500);
+        aiSaveTimer = setTimeout(() => {
+          saveLog("チャッピー", text); // 🌟 「ai」から「チャッピー」に変更
+        }, 1500);
       }, 150);
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -176,7 +182,7 @@ let aiObserveTimer = null; // ←追加
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.1 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
