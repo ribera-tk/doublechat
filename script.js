@@ -29,7 +29,7 @@ document.head.appendChild(script2);
 
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v11.3
+        DoubleChat v11.４
         <span id="dc-min">−</span>
       </div>
       <div id="dc-body">
@@ -105,6 +105,27 @@ document.head.appendChild(script2);
     minBtn.addEventListener("touchstart", toggleMin, { passive: true });
 
     enableDrag();
+  }
+  // 🌟 スマホ画面にエラーを吐き出すデバッグ版 saveLog
+  function saveLog(role, content) {
+    if (!db) return;
+    db.collection("chat_logs").add({
+      role: role,
+      content: content,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(err => {
+      console.error("Firebase保存失敗:", err);
+      
+      // 💥 追加：スマホのログ画面に赤文字でエラーを表示する
+      const log = document.getElementById("dc-log");
+      if (log) {
+        const line = document.createElement("div");
+        line.textContent = "⚠️ Firebase拒否: " + err.message;
+        line.style.color = "#ff4d4d";
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+    });
   }
 
   // =========================
