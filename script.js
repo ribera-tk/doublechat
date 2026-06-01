@@ -11,7 +11,7 @@
   let aiSaveTimer = null;
 
   // 🌟 下記で作成するGASの「ウェブアプリURL」をここに貼り付けてください
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxbc6exLL_eGwudv-lew5hKZSlRsmiIsPjyapD4MYIr9seDs7rVrYkbJZqwY7JKxFKRYQ/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbw5gKWmb6ayTOXMPLY-YARv3mSBD115-01jRduWABIN0GoPl7xSSPrh0WitANDYUqo6LQ/exec";
 
   function createUI() {
     if (document.getElementById("dc-root")) return;
