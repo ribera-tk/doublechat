@@ -20,7 +20,7 @@
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">DoubleChat v13.2 <span id="dc-min">-</span></div>
+      <div id="dc-header">DoubleChat v13.３ <span id="dc-min">-</span></div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
@@ -78,35 +78,56 @@
     });
   }
 
- // 🌟 エラー原因あぶり出し版：Geminiを呼び出す関数
-  function callGemini(text, callback) {
+ // 🌟 v13.3：1.5-flash安定化 ＆ GPTログ連携版
+function callGemini(text, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") return;
 
-    const customPrompt = text + "\n\n【制約】必ず日本語で、3行程度の簡潔な文章で回答してください。無駄な解説や挨拶は省いてください。";
+    // 1. チャッピー（GPT）の最新の回答を画面から自動取得
+    const gptArticles = document.querySelectorAll('main article');
+    let gptLatestResponse = "（まだ回答なし）";
+    if (gptArticles.length > 0) {
+        const lastArticle = gptArticles[gptArticles.length - 1];
+        gptLatestResponse = lastArticle.innerText || "";
+    }
 
+    // 2. 監督の指示にチャッピーのログを合流させる
+    const customPrompt = `
+【監督からの指示】
+${text}
+
+【チャッピー（GPT）の最新の回答】
+${gptLatestResponse}
+
+上記のチャッピーの回答を踏まえた上で、あなたの見解や補足を簡潔に述べてください。
+【制約】必ず日本語で。ChatGPTへコピーする手間を減らすため、提案は抑えめにしてください。
+`.trim();
+
+    // 3. 1.5-flashに変更して通信実行
     GM_xmlhttpRequest({
-      method: "POST",
-      url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q", // 💡 モデル名を2.0に調整
-      headers: { "Content-Type": "application/json" },
-      data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
-      onload: function (res) {
-        try {
-          const data = JSON.parse(res.responseText);
-          
-          // 💡 Googleからのエラー理由を直接ログに叩き込む
-          if (data.error) {
-            callback("Googleエラー: " + data.error.message);
-            return;
-          }
-          
-          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "応答が空っぽだぜ";
-          callback(reply);
-        } catch(e) {
-          callback("パースエラー status:" + res.status);
+        method: "POST",
+        url: "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" + apiKey,
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
+        onload: function(res) {
+            try {
+                const data = JSON.parse(res.responseText);
+                
+                // エラーチェック
+                if (data.error) {
+                    callback("Googleエラー: " + data.error.message);
+                    return;
+                }
+                
+                // 正常な返答の取得
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "応答データを読み取れませんでした";
+                callback(reply);
+            } catch(e) {
+                callback("パースエラー status:" + res.status);
+            }
         }
-      }
     });
-  }
+}
+
   async function send() {
     if (isSending) return;
     isSending = true;
@@ -187,7 +208,7 @@
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.2 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.3 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
