@@ -102,66 +102,46 @@
   function saveLog(role, content) {
     if (!GAS_URL || GAS_URL.includes("ここに") || typeof GM_xmlhttpRequest === "undefined") return;
     
-    GM_xmlhttpRequest({
-      method: "GET",
-      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
-      onload: function(res) { console.log("Log saved:", res.responseText); }
-    });
+  GM_xmlhttpRequest({
+  method: "POST",
+  url: GAS_URL,
+  headers: { "Content-Type": "application/json" },
+  data: JSON.stringify({ text: customPrompt }),
+
+  onload: function(res) {
+    console.log("GAS返答:", res.responseText);
+
+    try {
+      const data = JSON.parse(res.responseText);
+
+      // エラー処理
+      if (data.error) {
+        const msg = data.error.message || JSON.stringify(data.error);
+        callback("Geminiエラー: " + msg);
+        return;
+      }
+
+      // 正常レスポンス
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!reply) {
+        callback("Gemini: 空 or 形式違い");
+        return;
+      }
+
+      callback(reply);
+
+    } catch (e) {
+      console.error("JSONパース失敗:", e, res.responseText);
+      callback("Gemini: パース失敗");
+    }
+  },
+
+  onerror: function(err) {
+    console.error("通信エラー:", err);
+    callback("Gemini: 通信エラー");
   }
-
-  function callGemini(text, callback) {
-    if (typeof GM_xmlhttpRequest === "undefined") return;
-
-    // 1. チャッピー（ChatGPT）の最新の回答を取得
-    const gptArticles = document.querySelectorAll('main article');
-    let gptLatestResponse = "（まだ回答なし）";
-    if (gptArticles.length > 0) {
-        const lastArticle = gptArticles[gptArticles.length - 1];
-        gptLatestResponse = lastArticle.innerText || "";
-    }
-
-    // 2. Geminiに送るプロンプトの組み立て
-    const customPrompt = `
-【指示】${text}
-【チャッピーの回答】${gptLatestResponse}
-上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
-`.trim();
-
-    // 3. GAS経由で安全にGeminiを呼び出す（古い直接URLは完全削除）
-    GM_xmlhttpRequest({
-        method: "POST",
-        url: GAS_URL,
-        headers: { "Content-Type": "application/json" },
-        data: JSON.stringify({ text: customPrompt }),
-        onload: function(res) {
-  console.log("GAS返答:", res.responseText);
-
-  try {
-    const data = JSON.parse(res.responseText);
-
-    // ★ここ追加
-    if (data.error) {
-      const msg = data.error.message || JSON.stringify(data.error);
-      callback("Geminiエラー: " + msg);
-      return;
-    }
-
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!reply) {
-      callback("Gemini: 空 or 形式違い");
-      return;
-    }
-
-    callback(reply);
-
-  } catch (e) {
-    callback("Gemini: パース失敗");
-  }
-          ｝
 });
-
-
   async function send() {
     if (isSending) return;
     isSending = true;
