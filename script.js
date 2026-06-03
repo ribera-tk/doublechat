@@ -21,7 +21,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v13.5
+        DoubleChat v13.6
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -134,22 +134,31 @@
         headers: { "Content-Type": "application/json" },
         data: JSON.stringify({ text: customPrompt }),
         onload: function(res) {
-            try {
-                const data = JSON.parse(res.responseText);
-                if (data.error) {
-                    callback("GASエラー: " + data.error.message);
-                    return;
-                }
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
-                callback(reply);
-            } catch(e) {
-                callback("パースエラー（GASからの返却値が不正です）");
-            }
-        },
-        onerror: function() {
-            callback("通信エラー（GASへの接続に失敗しました）");
-        }
-    });
+  console.log("GAS返答:", res.responseText);
+
+  try {
+    const data = JSON.parse(res.responseText);
+
+    // ★ここ追加
+    if (data.error) {
+      const msg = data.error.message || JSON.stringify(data.error);
+      callback("Geminiエラー: " + msg);
+      return;
+    }
+
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!reply) {
+      callback("Gemini: 空 or 形式違い");
+      return;
+    }
+
+    callback(reply);
+
+  } catch (e) {
+    callback("Gemini: パース失敗");
+  }
+});
 }
 
   async function send() {
@@ -235,7 +244,7 @@
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.5 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.6 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
