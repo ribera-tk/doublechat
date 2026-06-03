@@ -12,11 +12,8 @@
   let aiObserveTimer = null;
 
   // 🌟 GASウェブアプリURL
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbwCeI0cuaFm4IflIzTcMQBqGyH9L8l-zPkNv5OJGHV8JhAwQtBrVQvF3vtkv-LK2a8jug/exec";
   
-  // 🔑 Gemini APIキー（復活させたぜ！）
-  const apiKey = "AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q";
-
   function createUI() {
     if (document.getElementById("dc-root")) return;
 
@@ -24,7 +21,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v13.4
+        DoubleChat v13.5
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -112,11 +109,10 @@
     });
   }
 
-  // 🌟 v13.4：1.5-flash安定化(v1beta対応版) ＆ GPTログ連携
   function callGemini(text, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") return;
 
-    // 1. チャッピー（GPT）の最新の回答を画面から自動取得
+    // 1. チャッピー（ChatGPT）の最新の回答を取得
     const gptArticles = document.querySelectorAll('main article');
     let gptLatestResponse = "（まだ回答なし）";
     if (gptArticles.length > 0) {
@@ -124,45 +120,37 @@
         gptLatestResponse = lastArticle.innerText || "";
     }
 
-    // 2. 指示にチャッピーのログを合流させる
+    // 2. Geminiに送るプロンプトの組み立て
     const customPrompt = `
-【指示】
-${text}
-
-【チャッピー（GPT）の最新の回答】
-${gptLatestResponse}
-
-上記のチャッピーの回答を踏まえた上で、あなたの見解や補足を簡潔に述べてください。
-【制約】必ず日本語で。ChatGPTへコピーする手間を減らすため、提案は抑えめにしてください。
+【指示】${text}
+【チャッピーの回答】${gptLatestResponse}
+上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
 `.trim();
 
-    // 3. 1.5-flash ＆ v1beta URL で通信実行
+    // 3. GAS経由で安全にGeminiを呼び出す（古い直接URLは完全削除）
     GM_xmlhttpRequest({
         method: "POST",
-        // 💡 143行目をこれに差し替え（v1beta ＋ 2.5-flash）
-url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey,
-
+        url: GAS_URL,
         headers: { "Content-Type": "application/json" },
-        data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
+        data: JSON.stringify({ text: customPrompt }),
         onload: function(res) {
             try {
                 const data = JSON.parse(res.responseText);
-                
-                // エラーチェック
                 if (data.error) {
-                    callback("Googleエラー: " + data.error.message);
+                    callback("GASエラー: " + data.error.message);
                     return;
                 }
-                
-                // 正常な返答の取得
-                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "応答データを読み取れませんでした";
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
                 callback(reply);
             } catch(e) {
-                callback("パースエラー status:" + res.status);
+                callback("パースエラー（GASからの返却値が不正です）");
             }
+        },
+        onerror: function() {
+            callback("通信エラー（GASへの接続に失敗しました）");
         }
     });
-  }
+}
 
   async function send() {
     if (isSending) return;
@@ -247,7 +235,7 @@ url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:g
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.4 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.5 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
