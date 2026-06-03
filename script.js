@@ -13,6 +13,9 @@
 
   // 🌟 JemyさんのGASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
+  
+  // 🔑 Gemini APIキー
+  const apiKey = "AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q";
 
   function createUI() {
     if (document.getElementById("dc-root")) return;
@@ -20,7 +23,13 @@
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
-      <div id="dc-header">DoubleChat v13.３ <span id="dc-min">-</span></div>
+      <div id="dc-header">
+        DoubleChat v13.3 
+        <div id="dc-controls">
+          <span id="dc-max">□</span>
+          <span id="dc-min">-</span>
+        </div>
+      </div>
       <div id="dc-body">
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..."></textarea>
@@ -31,27 +40,50 @@
 
     const style = document.createElement("style");
     style.innerHTML = `
-      #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; }
-      #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; user-select: none; }
-      #dc-min { cursor: pointer; padding: 0 10px; }
-      #dc-body { padding: 10px; }
-      #dc-log { display: flex; flex-direction: column; height: 120px; overflow-y: auto; background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
-      #dc-input { width: 100%; height: 60px; margin-bottom: 6px; }
-      #dc-send { width: 100%; padding: 6px; }
+      #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; transition: all 0.2s ease; }
+      #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; user-select: none; border-bottom: 1px solid #ccc; }
+      #dc-controls { display: flex; gap: 15px; }
+      #dc-max, #dc-min { cursor: pointer; font-weight: bold; }
+      #dc-body { padding: 10px; display: flex; flex-direction: column; }
+      #dc-log { display: flex; flex-direction: column; height: 120px; overflow-y: auto; background: rgba(255,255,255,0.8); border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
+      #dc-input { width: 100%; height: 60px; margin-bottom: 6px; box-sizing: border-box; resize: vertical; }
+      #dc-send { width: 100%; padding: 8px; cursor: pointer; }
+      
+      /* 🌟 最大化時のスタイル */
+      .dc-maximized { width: 90vw !important; height: 85vh !important; top: 5vh !important; left: 5vw !important; right: auto !important; }
+      .dc-maximized #dc-body { height: calc(100% - 40px); }
+      .dc-maximized #dc-log { flex-grow: 1; height: auto !important; font-size: 14px; }
+      .dc-maximized #dc-input { height: 100px; }
     `;
     document.head.appendChild(style);
 
     document.getElementById("dc-send").onclick = send;
 
+    // 最小化の処理
     const minBtn = document.getElementById("dc-min");
     const body = document.getElementById("dc-body");
     const toggleMin = (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (body.style.display === "none") { body.style.display = "block"; minBtn.textContent = "-"; }
+      if (body.style.display === "none") { body.style.display = "flex"; minBtn.textContent = "-"; }
       else { body.style.display = "none"; minBtn.textContent = "+"; }
     };
     minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
+
+    // 🌟 最大化の処理
+    const maxBtn = document.getElementById("dc-max");
+    const toggleMax = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      root.classList.toggle("dc-maximized");
+      // 最大化時は最小化を解除しておく
+      if (root.classList.contains("dc-maximized")) {
+        body.style.display = "flex";
+        minBtn.textContent = "-";
+      }
+    };
+    maxBtn.addEventListener("touchstart", toggleMax, { passive: false });
+    maxBtn.addEventListener("click", toggleMax);
+
     enableDrag();
   }
 
@@ -60,6 +92,9 @@
     if (!log) return;
     const line = document.createElement("div");
     line.textContent = text;
+    line.style.marginBottom = "4px";
+    line.style.borderBottom = "1px dashed #eee";
+    line.style.paddingBottom = "4px";
     if (text.startsWith("YOU:")) {
       line.style.color = "#0a84ff";
       saveLog("user", text.replace("YOU: ", ""));
@@ -78,8 +113,8 @@
     });
   }
 
- // 🌟 v13.3：1.5-flash安定化 ＆ GPTログ連携版
-function callGemini(text, callback) {
+  // 🌟 v13.3：1.5-flash安定化 ＆ GPTログ連携版
+  function callGemini(text, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") return;
 
     // 1. チャッピー（GPT）の最新の回答を画面から自動取得
@@ -126,7 +161,7 @@ ${gptLatestResponse}
             }
         }
     });
-}
+  }
 
   async function send() {
     if (isSending) return;
@@ -140,7 +175,7 @@ ${gptLatestResponse}
     // ChatGPTの送信と同時にGeminiも叩く！
     callGemini(text, (reply) => {
       appendLog("Gemini: " + reply);
-      saveLog("ジェミー", reply); // 🌟 「gemini」から「ジェミー」に変更
+      saveLog("ジェミー", reply);
     });
 
     try {
@@ -180,12 +215,15 @@ ${gptLatestResponse}
           const line = document.createElement("div");
           line.textContent = "AI: " + text;
           line.style.color = "#2ecc71";
+          line.style.marginBottom = "4px";
+          line.style.borderBottom = "1px dashed #eee";
+          line.style.paddingBottom = "4px";
           log.appendChild(line);
         }
         if (isAtBottom) log.scrollTop = log.scrollHeight;
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
-          saveLog("チャッピー", text); // 🌟 「ai」から「チャッピー」に変更
+          saveLog("チャッピー", text);
         }, 1500);
       }, 150);
     });
@@ -196,10 +234,10 @@ ${gptLatestResponse}
     const box = document.getElementById("dc-root");
     const header = document.getElementById("dc-header");
     let dragging = false; let offsetX = 0; let offsetY = 0;
-    header.addEventListener("mousedown", (e) => { if (e.target.id === "dc-min") return; dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop; });
+    header.addEventListener("mousedown", (e) => { if (e.target.id === "dc-min" || e.target.id === "dc-max") return; dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop; });
     document.addEventListener("mousemove", (e) => { if (!dragging) return; box.style.left = (e.clientX - offsetX) + "px"; box.style.top = (e.clientY - offsetY) + "px"; box.style.right = "auto"; });
     document.addEventListener("mouseup", () => dragging = false);
-    header.addEventListener("touchstart", (e) => { if (e.target.id === "dc-min") return; dragging = true; const t = e.touches[0]; offsetX = t.clientX - box.offsetLeft; offsetY = t.clientY - box.offsetTop; });
+    header.addEventListener("touchstart", (e) => { if (e.target.id === "dc-min" || e.target.id === "dc-max") return; dragging = true; const t = e.touches[0]; offsetX = t.clientX - box.offsetLeft; offsetY = t.clientY - box.offsetTop; });
     document.addEventListener("touchmove", (e) => { if (!dragging) return; e.preventDefault(); const t = e.touches[0]; box.style.left = (t.clientX - offsetX) + "px"; box.style.top = (t.clientY - offsetY) + "px"; box.style.right = "auto"; }, { passive: false });
     document.addEventListener("touchend", () => dragging = false);
   }
@@ -212,3 +250,4 @@ ${gptLatestResponse}
   }
   setTimeout(bootstrap, 1500);
 })();
+
