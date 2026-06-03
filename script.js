@@ -12,7 +12,7 @@
   let aiObserveTimer = null;
 
   // 🌟 GASウェブアプリURL
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwCeI0cuaFm4IflIzTcMQBqGyH9L8l-zPkNv5OJGHV8JhAwQtBrVQvF3vtkv-LK2a8jug/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
   function createUI() {
     if (document.getElementById("dc-root")) return;
