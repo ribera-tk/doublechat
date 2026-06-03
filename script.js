@@ -158,8 +158,9 @@
   } catch (e) {
     callback("Gemini: パース失敗");
   }
+          ｝
 });
-}
+
 
   async function send() {
     if (isSending) return;
