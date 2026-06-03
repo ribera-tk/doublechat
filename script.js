@@ -139,7 +139,9 @@ ${gptLatestResponse}
     // 3. 1.5-flash ＆ v1beta URL で通信実行
     GM_xmlhttpRequest({
         method: "POST",
-        url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey,
+        // 💡 143行目をこれに差し替え（v1beta ＋ 2.5-flash）
+url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey,
+
         headers: { "Content-Type": "application/json" },
         data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
         onload: function(res) {
