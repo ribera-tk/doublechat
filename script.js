@@ -13,7 +13,7 @@
 
   // 🌟 GASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbwCeI0cuaFm4IflIzTcMQBqGyH9L8l-zPkNv5OJGHV8JhAwQtBrVQvF3vtkv-LK2a8jug/exec";
-  
+
   function createUI() {
     if (document.getElementById("dc-root")) return;
 
@@ -21,7 +21,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v13.6
+        DoubleChat v13.7
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -99,49 +99,64 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  // 🌟 ログ保存用（独立したGET通信）
   function saveLog(role, content) {
     if (!GAS_URL || GAS_URL.includes("ここに") || typeof GM_xmlhttpRequest === "undefined") return;
     
-  GM_xmlhttpRequest({
-  method: "POST",
-  url: GAS_URL,
-  headers: { "Content-Type": "application/json" },
-  data: JSON.stringify({ text: customPrompt }),
-
-  onload: function(res) {
-    console.log("GAS返答:", res.responseText);
-
-    try {
-      const data = JSON.parse(res.responseText);
-
-      // エラー処理
-      if (data.error) {
-        const msg = data.error.message || JSON.stringify(data.error);
-        callback("Geminiエラー: " + msg);
-        return;
-      }
-
-      // 正常レスポンス
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!reply) {
-        callback("Gemini: 空 or 形式違い");
-        return;
-      }
-
-      callback(reply);
-
-    } catch (e) {
-      console.error("JSONパース失敗:", e, res.responseText);
-      callback("Gemini: パース失敗");
-    }
-  },
-
-  onerror: function(err) {
-    console.error("通信エラー:", err);
-    callback("Gemini: 通信エラー");
+    GM_xmlhttpRequest({
+      method: "GET",
+      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
+      onload: function(res) { console.log("Log saved:", res.responseText); }
+    });
   }
-});
+
+  // 🌟 Gemini通信用（POST通信・2.5-flash連携）
+  function callGemini(text, callback) {
+    // 【修正③】拡張機能のエラーハンドリングを強化
+    if (typeof GM_xmlhttpRequest === "undefined") {
+      callback("Gemini: 拡張機能エラー");
+      return;
+    }
+
+    const gptArticles = document.querySelectorAll('main article');
+    let gptLatestResponse = "（まだ回答なし）";
+    if (gptArticles.length > 0) {
+        const lastArticle = gptArticles[gptArticles.length - 1];
+        // 【修正①】textContent へ安全に変更
+        gptLatestResponse = lastArticle.textContent || "";
+    }
+
+    const customPrompt = `
+【指示】${text}
+【チャッピーの回答】${gptLatestResponse}
+上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
+`.trim();
+
+    GM_xmlhttpRequest({
+        method: "POST",
+        url: GAS_URL,
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify({ text: customPrompt }),
+        onload: function(res) {
+            try {
+                const data = JSON.parse(res.responseText);
+                if (data.error) {
+                    const msg = data.error.message || JSON.stringify(data.error);
+                    callback("Geminiエラー: " + msg);
+                    return;
+                }
+                const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
+                callback(reply);
+            } catch(e) {
+                callback("Gemini: パース失敗");
+            }
+        },
+        onerror: function() {
+            callback("Gemini: 通信エラー");
+        }
+    });
+  }
+
   async function send() {
     if (isSending) return;
     isSending = true;
@@ -151,10 +166,10 @@
     appendLog("YOU: " + text);
     inputEl.value = "";
 
-    // ChatGPTの送信と同時にGeminiも叩く！
     callGemini(text, (reply) => {
       appendLog("Gemini: " + reply);
-      saveLog("ジェミー", reply);
+      // 【修正②】ジェミーのログ保存文字数を500字に制限して安全に
+      saveLog("ジェミー", reply.slice(0, 500));
     });
 
     try {
@@ -225,7 +240,7 @@
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.6 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.7 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
