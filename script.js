@@ -11,10 +11,10 @@
   let aiSaveTimer = null;
   let aiObserveTimer = null;
 
-  // 🌟 JemyさんのGASウェブアプリURL
+  // 🌟 GASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbw5b5_ouW3kbcKZzTakK-EfY_L-OENUYKtLn1l0jdf_PJEvZYTcfeyPJ7rXy8Gp9i-7fA/exec";
   
-  // 🔑 Gemini APIキー
+  // 🔑 Gemini APIキー（復活させたぜ！）
   const apiKey = "AIzaSyArR0LRL8pP0zRBiVULEvhxVkHzooj_34Q";
 
   function createUI() {
@@ -24,7 +24,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v13.3 
+        DoubleChat v13.4
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -70,12 +70,11 @@
     minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
 
-    // 🌟 最大化の処理
+    // 最大化の処理
     const maxBtn = document.getElementById("dc-max");
     const toggleMax = (e) => {
       e.preventDefault(); e.stopPropagation();
       root.classList.toggle("dc-maximized");
-      // 最大化時は最小化を解除しておく
       if (root.classList.contains("dc-maximized")) {
         body.style.display = "flex";
         minBtn.textContent = "-";
@@ -113,7 +112,7 @@
     });
   }
 
-  // 🌟 v13.3：1.5-flash安定化 ＆ GPTログ連携版
+  // 🌟 v13.4：1.5-flash安定化(v1beta対応版) ＆ GPTログ連携
   function callGemini(text, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") return;
 
@@ -125,9 +124,9 @@
         gptLatestResponse = lastArticle.innerText || "";
     }
 
-    // 2. 監督の指示にチャッピーのログを合流させる
+    // 2. 指示にチャッピーのログを合流させる
     const customPrompt = `
-【監督からの指示】
+【指示】
 ${text}
 
 【チャッピー（GPT）の最新の回答】
@@ -137,11 +136,10 @@ ${gptLatestResponse}
 【制約】必ず日本語で。ChatGPTへコピーする手間を減らすため、提案は抑えめにしてください。
 `.trim();
 
-    // 3. 1.5-flashに変更して通信実行
+    // 3. 1.5-flash ＆ v1beta URL で通信実行
     GM_xmlhttpRequest({
         method: "POST",
-        url: "url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey,
-" + apiKey,
+        url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey,
         headers: { "Content-Type": "application/json" },
         data: JSON.stringify({ contents: [{ parts: [{ text: customPrompt }] }] }),
         onload: function(res) {
@@ -247,8 +245,7 @@ ${gptLatestResponse}
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.3 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.4 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
-
