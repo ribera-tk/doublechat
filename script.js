@@ -45,11 +45,13 @@
     return log;
   }
 
-  function buildContext() {
-    return conversationLog.slice(-6)
-      .map(l => `[${l.role}] ${l.content}`)
-      .join("\n");
-  }
+ function buildContext() {
+  return conversationLog.slice(-6)
+    .map(function(l) {
+      return "[" + l.role + "] " + l.content;
+    })
+    .join("\n");
+}
 
   function saveLog(role, content) {
     addLog(role, content);
