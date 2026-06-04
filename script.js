@@ -11,17 +11,54 @@
   let aiSaveTimer = null;
   let aiObserveTimer = null;
 
+  // 🌟 非同期整流用のキューシステムと状態管理
+  let queue = [];
+  let isProcessing = false;
+  let lastHash = "";
+  let currentUserQuery = ""; 
+
   // 🌟 GASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
+  // 🔒 【チャッピー先生直伝】重複を完全にすり潰す軽量ハッシュ関数
+  function getHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash |= 0;
+    }
+    return hash.toString();
+  }
+
+  // ⛓️ シリアル（順番通り）にタスクを実行するキューチェイン
+  async function enqueue(task) {
+    queue.push(task);
+    if (!isProcessing) {
+      await processQueue();
+    }
+  }
+
+  async function processQueue() {
+    isProcessing = true;
+    while (queue.length > 0) {
+      const task = queue.shift();
+      try {
+        await task();
+      } catch (e) {
+        console.error("Queue task error:", e);
+      }
+    }
+    isProcessing = false;
+  }
+
   function createUI() {
     if (document.getElementById("dc-root")) return;
-
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v13.9
+        DoubleChat v14.0
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -45,8 +82,6 @@
       #dc-log { display: flex; flex-direction: column; height: 120px; overflow-y: auto; background: rgba(255,255,255,0.8); border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
       #dc-input { width: 100%; height: 60px; margin-bottom: 6px; box-sizing: border-box; resize: vertical; }
       #dc-send { width: 100%; padding: 8px; cursor: pointer; }
-      
-      /* 🌟 最大化時のスタイル */
       .dc-maximized { width: 90vw !important; height: 85vh !important; top: 5vh !important; left: 5vw !important; right: auto !important; }
       .dc-maximized #dc-body { height: calc(100% - 40px); }
       .dc-maximized #dc-log { flex-grow: 1; height: auto !important; font-size: 14px; }
@@ -56,7 +91,6 @@
 
     document.getElementById("dc-send").onclick = send;
 
-    // 最小化の処理
     const minBtn = document.getElementById("dc-min");
     const body = document.getElementById("dc-body");
     const toggleMin = (e) => {
@@ -67,15 +101,10 @@
     minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
 
-    // 最大化の処理
     const maxBtn = document.getElementById("dc-max");
     const toggleMax = (e) => {
       e.preventDefault(); e.stopPropagation();
       root.classList.toggle("dc-maximized");
-      if (root.classList.contains("dc-maximized")) {
-        body.style.display = "flex";
-        minBtn.textContent = "-";
-      }
     };
     maxBtn.addEventListener("touchstart", toggleMax, { passive: false });
     maxBtn.addEventListener("click", toggleMax);
@@ -91,18 +120,17 @@
     line.style.marginBottom = "4px";
     line.style.borderBottom = "1px dashed #eee";
     line.style.paddingBottom = "4px";
+    
     if (text.startsWith("YOU:")) {
       line.style.color = "#0a84ff";
-      saveLog("user", text.replace("YOU: ", ""));
+      enqueue(async () => { saveLog("user", text.replace("YOU: ", "")); });
     }
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
   }
 
-  // 🌟 ログ保存用（独立したGET通信）
   function saveLog(role, content) {
-    if (!GAS_URL || GAS_URL.includes("ここに") || typeof GM_xmlhttpRequest === "undefined") return;
-    
+    if (!GAS_URL || typeof GM_xmlhttpRequest === "undefined") return;
     GM_xmlhttpRequest({
       method: "GET",
       url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
@@ -110,20 +138,14 @@
     });
   }
 
-  // 🌟 Gemini通信用（POST通信・2.5-flash連携）
   function callGemini(text, callback) {
-    // 【修正③】拡張機能のエラーハンドリングを強化
-    if (typeof GM_xmlhttpRequest === "undefined") {
-      callback("Gemini: 拡張機能エラー");
-      return;
-    }
-
+    if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
+    
     const gptArticles = document.querySelectorAll('main article');
     let gptLatestResponse = "（まだ回答なし）";
     if (gptArticles.length > 0) {
-        const lastArticle = gptArticles[gptArticles.length - 1];
-        // 【修正①】textContent へ安全に変更
-        gptLatestResponse = lastArticle.textContent || "";
+      const lastArticle = gptArticles[gptArticles.length - 1];
+      gptLatestResponse = lastArticle.textContent || "";
     }
 
     const customPrompt = `
@@ -133,27 +155,19 @@
 `.trim();
 
     GM_xmlhttpRequest({
-        method: "POST",
-        url: GAS_URL,
-        headers: { "Content-Type": "application/json" },
-        data: JSON.stringify({ text: customPrompt }),
-        onload: function(res) {
-            try {
-                const data = JSON.parse(res.responseText);
-                if (data.error) {
-                    const msg = data.error.message || JSON.stringify(data.error);
-                    callback("Geminiエラー: " + msg);
-                    return;
-                }
-                const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
-                callback(reply);
-            } catch(e) {
-                callback("Gemini: パース失敗");
-            }
-        },
-        onerror: function() {
-            callback("Gemini: 通信エラー");
-        }
+      method: "POST",
+      url: GAS_URL,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ text: customPrompt }),
+      onload: function(res) {
+        try {
+          const data = JSON.parse(res.responseText);
+          if (data.error) { callback("Geminiエラー: " + (data.error.message || JSON.stringify(data.error))); return; }
+          const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
+          callback(reply);
+        } catch(e) { callback("Gemini: パース失敗"); }
+      },
+      onerror: function() { callback("Gemini: 通信エラー"); }
     });
   }
 
@@ -163,14 +177,10 @@
     const inputEl = document.getElementById("dc-input");
     const text = inputEl.value.trim();
     if (!text) { isSending = false; return; }
-    appendLog("YOU: " + text);
-    inputEl.value = "";
 
-    callGemini(text, (reply) => {
-      appendLog("Gemini: " + reply);
-      // 【修正②】ジェミーのログ保存文字数を500字に制限して安全に
-      saveLog("ジェミー", reply.slice(0, 500));
-    });
+    appendLog("YOU: " + text);
+    currentUserQuery = text; // 🌟 ジェミーの呼び出し用に質問をキープ
+    inputEl.value = "";
 
     try {
       const target = document.getElementById("prompt-textarea") || document.querySelector("main textarea") || document.querySelector("[contenteditable='true']");
@@ -189,15 +199,11 @@
     }
   }
 
-// 🌟 チャッピーの状態管理用変数
-  let lastAIText = ""; 
-
   function observeAI() {
     const observer = new MutationObserver(() => {
       if (aiObserveTimer) return;
       aiObserveTimer = setTimeout(() => {
         aiObserveTimer = null;
-        
         const messages = document.querySelectorAll("[data-message-author-role='assistant']");
         if (!messages.length) return;
         
@@ -205,28 +211,20 @@
         const text = last.textContent?.trim();
         if (!text || text.length < 10) return;
 
-        // 🛑 【状態管理ロック】すでに確定・保存済みのテキストなら完全にスルー（重複防止）
-        if (text === lastAIText) return;
-
         const log = document.getElementById("dc-log");
         if (!log) return;
         const isAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 30;
 
-        // 小窓の中にある直近の「AI:」ラインを検索
         let lastAiLine = null;
         const divs = log.getElementsByTagName("div");
         for (let i = divs.length - 1; i >= 0; i--) {
-          if (divs[i].textContent.startsWith("AI:")) {
-            lastAiLine = divs[i];
-            break;
-          }
+          if (divs[i].textContent.startsWith("AI:")) { lastAiLine = divs[i]; break; }
         }
 
-        // 🟢 【ライブ更新】チャッピーがまだタイピング中なら、小窓の同じ行をリアルタイム上書き
+        // 🟢 【ライブ更新】タイピング中は小窓の同じ行をリアルタイムに上書き
         if (lastAiLine && last.getAttribute("data-dc-observing") === "true") {
           lastAiLine.textContent = "AI: " + text;
         } else {
-          // 新しくチャッピーが喋り出した、またはYOUの発言を挟んだ後の新しい発言
           last.setAttribute("data-dc-observing", "true");
           const line = document.createElement("div");
           line.textContent = "AI: " + text;
@@ -239,12 +237,46 @@
 
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
-        // ⏳ 【タイピング停止検知】1.5秒間文字が増えなくなったら「確定」とみなしてロック＆ログ保存
+        // ⏳ 【ストリーム変化停止検知】1.5秒間文字が変化しなければ「確定（LOCKED）」
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
-          saveLog("チャッピー", text);
-          lastAIText = text; // このテキストを確定版として記憶
+          const currentHash = getHash(text);
+          
+          // 🛑 【ハッシュ重複防止】すでに確定済みの同じ内容ならスルー
+          if (currentHash === lastHash) return;
+          lastHash = currentHash;
+
           last.removeAttribute("data-dc-observing");
+
+          // 🌟 【非同期整流】確定イベントとしてキューに順次投入
+          enqueue(async () => {
+            saveLog("チャッピー", text);
+          });
+
+          // ユーザーからの最新質問がキープされていれば、チャッピー確定直後にジェミーを始動
+          if (currentUserQuery) {
+            const queryToGemini = currentUserQuery;
+            currentUserQuery = ""; // 連投防止クリア
+            
+            enqueue(async () => {
+              await new Promise((resolve) => {
+                callGemini(queryToGemini, (reply) => {
+                  const dcLog = document.getElementById("dc-log");
+                  if (dcLog) {
+                    const line = document.createElement("div");
+                    line.textContent = "Gemini: " + reply;
+                    line.style.marginBottom = "4px";
+                    line.style.borderBottom = "1px dashed #eee";
+                    line.style.paddingBottom = "4px";
+                    dcLog.appendChild(line);
+                    dcLog.scrollTop = dcLog.scrollHeight;
+                  }
+                  saveLog("ジェミー", reply.slice(0, 500));
+                  resolve(); // タスク完了、次のキューへ
+                });
+              });
+            });
+          }
         }, 1500);
       }, 150);
     });
@@ -255,19 +287,31 @@
     const box = document.getElementById("dc-root");
     const header = document.getElementById("dc-header");
     let dragging = false; let offsetX = 0; let offsetY = 0;
-    header.addEventListener("mousedown", (e) => { if (e.target.id === "dc-min" || e.target.id === "dc-max") return; dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop; });
-    document.addEventListener("mousemove", (e) => { if (!dragging) return; box.style.left = (e.clientX - offsetX) + "px"; box.style.top = (e.clientY - offsetY) + "px"; box.style.right = "auto"; });
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.id === "dc-min" || e.target.id === "dc-max") return;
+      dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop;
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return; box.style.left = (e.clientX - offsetX) + "px"; box.style.top = (e.clientY - offsetY) + "px"; box.style.right = "auto";
+    });
     document.addEventListener("mouseup", () => dragging = false);
-    header.addEventListener("touchstart", (e) => { if (e.target.id === "dc-min" || e.target.id === "dc-max") return; dragging = true; const t = e.touches[0]; offsetX = t.clientX - box.offsetLeft; offsetY = t.clientY - box.offsetTop; });
-    document.addEventListener("touchmove", (e) => { if (!dragging) return; e.preventDefault(); const t = e.touches[0]; box.style.left = (t.clientX - offsetX) + "px"; box.style.top = (t.clientY - offsetY) + "px"; box.style.right = "auto"; }, { passive: false });
+    header.addEventListener("touchstart", (e) => {
+      if (e.target.id === "dc-min" || e.target.id === "dc-max") return;
+      dragging = true; const t = e.touches[0]; offsetX = t.clientX - box.offsetLeft; offsetY = t.clientY - box.offsetTop;
+    });
+    document.addEventListener("touchmove", (e) => {
+      if (!dragging) return; e.preventDefault(); const t = e.touches[0]; box.style.left = (t.clientX - offsetX) + "px"; box.style.top = (t.clientY - offsetY) + "px"; box.style.right = "auto";
+    }, { passive: false });
     document.addEventListener("touchend", () => dragging = false);
   }
 
   function bootstrap() {
     if (!document.body) { setTimeout(bootstrap, 200); return; }
-    createUI(); observeAI();
+    createUI();
+    observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.9 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v14.0 起動完了</div>';
   }
+
   setTimeout(bootstrap, 1500);
 })();
