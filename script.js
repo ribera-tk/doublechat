@@ -255,7 +255,7 @@
             
             enqueue(async () => {
               await new Promise((resolve) => {
-                callGemini(queryToGemini, (reply) => {
+                callGemini(queryToGemini,text, (reply) => {
                   const dcLog = document.getElementById("dc-log");
                   if (dcLog) {
                     const line = document.createElement("div");
