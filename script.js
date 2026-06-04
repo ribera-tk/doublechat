@@ -21,7 +21,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v13.8
+        DoubleChat v13.9
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -189,23 +189,45 @@
     }
   }
 
+// 🌟 チャッピーの状態管理用変数
+  let lastAIText = ""; 
+
   function observeAI() {
     const observer = new MutationObserver(() => {
       if (aiObserveTimer) return;
       aiObserveTimer = setTimeout(() => {
         aiObserveTimer = null;
+        
         const messages = document.querySelectorAll("[data-message-author-role='assistant']");
         if (!messages.length) return;
+        
         const last = messages[messages.length - 1];
         const text = last.textContent?.trim();
         if (!text || text.length < 10) return;
+
+        // 🛑 【状態管理ロック】すでに確定・保存済みのテキストなら完全にスルー（重複防止）
+        if (text === lastAIText) return;
+
         const log = document.getElementById("dc-log");
         if (!log) return;
         const isAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 30;
-        const lastLine = log.lastElementChild;
-        if (lastLine && lastLine.textContent.startsWith("AI:") && text.startsWith(lastLine.textContent.replace("AI: ", "").slice(0, 10))) {
-          lastLine.textContent = "AI: " + text;
+
+        // 小窓の中にある直近の「AI:」ラインを検索
+        let lastAiLine = null;
+        const divs = log.getElementsByTagName("div");
+        for (let i = divs.length - 1; i >= 0; i--) {
+          if (divs[i].textContent.startsWith("AI:")) {
+            lastAiLine = divs[i];
+            break;
+          }
+        }
+
+        // 🟢 【ライブ更新】チャッピーがまだタイピング中なら、小窓の同じ行をリアルタイム上書き
+        if (lastAiLine && last.getAttribute("data-dc-observing") === "true") {
+          lastAiLine.textContent = "AI: " + text;
         } else {
+          // 新しくチャッピーが喋り出した、またはYOUの発言を挟んだ後の新しい発言
+          last.setAttribute("data-dc-observing", "true");
           const line = document.createElement("div");
           line.textContent = "AI: " + text;
           line.style.color = "#2ecc71";
@@ -214,10 +236,15 @@
           line.style.paddingBottom = "4px";
           log.appendChild(line);
         }
+
         if (isAtBottom) log.scrollTop = log.scrollHeight;
+
+        // ⏳ 【タイピング停止検知】1.5秒間文字が増えなくなったら「確定」とみなしてロック＆ログ保存
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
           saveLog("チャッピー", text);
+          lastAIText = text; // このテキストを確定版として記憶
+          last.removeAttribute("data-dc-observing");
         }, 1500);
       }, 150);
     });
@@ -240,7 +267,7 @@
     if (!document.body) { setTimeout(bootstrap, 200); return; }
     createUI(); observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.8 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v13.9 起動完了</div>';
   }
   setTimeout(bootstrap, 1500);
 })();
