@@ -138,19 +138,14 @@
     });
   }
 
-  function callGemini(text, callback) {
+  // 🌟 gptText を直接受け取る形に修正
+  function callGemini(text, gptText, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
     
-    const gptArticles = document.querySelectorAll('main article');
-    let gptLatestResponse = "（まだ回答なし）";
-    if (gptArticles.length > 0) {
-      const lastArticle = gptArticles[gptArticles.length - 1];
-      gptLatestResponse = lastArticle.textContent || "";
-    }
-
+    // 画面から拾い直す処理は全削除して、確定したgptTextをそのまま使う
     const customPrompt = `
 【指示】${text}
-【チャッピーの回答】${gptLatestResponse}
+【チャッピーの回答】${gptText || "（まだ回答なし）"}
 上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
 `.trim();
 
