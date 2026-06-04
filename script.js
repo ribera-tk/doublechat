@@ -9,7 +9,7 @@
   'use strict';
 
   const DC_VERSION = "v14.2C";
-  const GAS_URL = "YOUR_GAS_URL";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
   // =========================
   // ■ 端末判定
