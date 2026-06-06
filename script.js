@@ -1,6 +1,5 @@
-```javascript
 // ==UserScript==
-// @name         DoubleChat v14.2 Clean
+// @name         DoubleChat v14.2
 // @match        https://chatgpt.com/*
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
@@ -8,51 +7,62 @@
 (function () {
   'use strict';
 
-  const DC_VERSION = "v14.2C";
-  const GAS_URL = "YOUR_GAS_URL";
+  // =========================
+  // ■ 設定
+  // =========================
+  const DC_VERSION = "v14.2";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
   // =========================
-  // ■ 端末判定
+  // ■ 端末判定（ハイブリッド）
   // =========================
   function getDeviceMode() {
     const ua = navigator.userAgent;
     const isMobileUA = /Android|iPhone|iPad/i.test(ua);
     const isTouch = 'ontouchstart' in window;
     const smallScreen = window.innerWidth < 768;
-    return (isMobileUA || (isTouch && smallScreen)) ? "mobile" : "desktop";
+
+    if (isMobileUA || (isTouch && smallScreen)) return "mobile";
+    return "desktop";
   }
 
   const DEVICE_MODE = getDeviceMode();
   const DEBUG = DEVICE_MODE === "desktop";
 
-  function debug(label, data) {
+  function debugLog(label, data) {
     if (!DEBUG) return;
-    console.log("[DC]", label, data);
+    console.log(`[DC DEBUG] ${label}`, data);
   }
 
   // =========================
-  // ■ ログ
+  // ■ マギログ
   // =========================
   const conversationLog = [];
 
-  function addLog(role, content) {
+  function addLog(role, content, type = "message") {
     const log = {
+      id: "msg-" + Date.now(),
+      turn: conversationLog.length + 1,
       role,
+      type,
       content,
-      time: Date.now()
+      timestamp: Date.now()
     };
     conversationLog.push(log);
+    debugLog("ADD_LOG", log);
     return log;
   }
 
   function buildContext() {
-    return conversationLog.slice(-6)
+    return conversationLog
+      .slice(-6)
       .map(l => `[${l.role}] ${l.content}`)
       .join("\n");
   }
 
   function saveLog(role, content) {
     addLog(role, content);
+
     GM_xmlhttpRequest({
       method: "GET",
       url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content)
@@ -60,7 +70,7 @@
   }
 
   // =========================
-  // ■ UI
+  // ■ UI生成
   // =========================
   function createUI() {
     if (document.getElementById("dc-root")) return;
@@ -69,36 +79,41 @@
     root.id = "dc-root";
 
     root.innerHTML = `
-      <div id="dc-header">DoubleChat ${DC_VERSION} (${DEVICE_MODE})</div>
+      <div id="dc-header">
+        DoubleChat ${DC_VERSION} (${DEVICE_MODE})
+      </div>
       <div id="dc-body">
         <div id="dc-log"></div>
-        <textarea id="dc-input"></textarea>
+        <textarea id="dc-input" placeholder="入力..."></textarea>
         <button id="dc-send">送信</button>
+        ${DEBUG ? '<div id="dc-debug"></div>' : ''}
       </div>
     `;
 
     document.body.appendChild(root);
 
+    // ================= CSS
     const style = document.createElement("style");
     style.innerHTML = `
       #dc-root {
         position: fixed;
-        top: 60px;
+        top: 70px;
         right: 10px;
         width: 320px;
-        background: #fff;
+        background: rgba(255,255,255,0.95);
         z-index: 9999;
         border-radius: 10px;
+        font-family: Arial;
       }
 
-      .dc-mobile {
-        width: 100vw !important;
-        height: 100dvh !important;
-        top: 0 !important;
-        left: 0 !important;
+      #dc-header {
+        padding: 10px;
+        font-weight: bold;
+        border-bottom: 1px solid #ccc;
       }
 
       #dc-body {
+        padding: 10px;
         display: flex;
         flex-direction: column;
         height: 300px;
@@ -108,10 +123,33 @@
         flex-grow: 1;
         overflow-y: auto;
         font-size: 12px;
+        border: 1px solid #ddd;
+        margin-bottom: 6px;
+      }
+
+      #dc-input {
+        height: 60px;
+      }
+
+      #dc-debug {
+        font-size: 10px;
+        color: #999;
+        margin-top: 5px;
+      }
+
+      /* モバイル最適化 */
+      .dc-mobile {
+        width: 100vw !important;
+        height: 100dvh !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: auto !important;
+        border-radius: 0 !important;
       }
     `;
     document.head.appendChild(style);
 
+    // モード適用
     if (DEVICE_MODE === "mobile") {
       root.classList.add("dc-mobile");
     } else {
@@ -120,7 +158,9 @@
 
     document.getElementById("dc-send").onclick = send;
 
-    appendLog("🟢 起動 " + DC_VERSION);
+    // 起動ログ
+    appendLog(`🟢 DoubleChat ${DC_VERSION} 起動 (${DEVICE_MODE})`);
+    saveLog("system", `起動 ${DC_VERSION} ${DEVICE_MODE}`);
   }
 
   function appendLog(text) {
@@ -131,15 +171,29 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  function debugUI(data) {
+    if (!DEBUG) return;
+    const el = document.getElementById("dc-debug");
+    if (el) el.textContent = JSON.stringify(data, null, 1);
+  }
+
   // =========================
   // ■ Gemini
   // =========================
-  function callGemini(userText, callback) {
+  function callGemini(text, callback) {
+
+    const context = buildContext();
+
+    debugLog("GEMINI_CONTEXT", context);
 
     const prompt = `
-${buildContext()}
+【会話ログ】
+${context}
 
-指示: ${userText}
+【指示】
+${text}
+
+チャッピーの回答を補足して
 `;
 
     GM_xmlhttpRequest({
@@ -158,106 +212,95 @@ ${buildContext()}
   // =========================
   // ■ 送信
   // =========================
-  function send() {
+  async function send() {
     const input = document.getElementById("dc-input");
-    const userText = input.value.trim();
-    if (!userText) return;
+    const text = input.value.trim();
+    if (!text) return;
 
-    appendLog("YOU: " + userText);
-    addLog("user", userText);
+    appendLog("YOU: " + text);
+    addLog("user", text);
     input.value = "";
 
-    callGemini(userText, (reply) => {
+    callGemini(text, (reply) => {
       appendLog("Gemini: " + reply);
       saveLog("ジェミー", reply);
     });
 
     const ta = document.querySelector("main textarea");
-    ta.value = userText;
+    ta.value = text;
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     document.querySelector("button[data-testid='send-button']")?.click();
   }
 
   // =========================
-  // ■ AI監視（完全安定版）
+  // ■ AI監視（安定検知）
   // =========================
+  let lastText = "";
+  let stableCount = 0;
+
   function observeAI() {
+    const observer = new MutationObserver(() => {
 
-    const main = document.querySelector("main");
-    if (!main) return;
-
-    let lastAiText = "";
-    let stableCount = 0;
-    let lastAiLine = null;
-    let ticking = false;
-
-    function process() {
-      ticking = false;
-
-      const msgs = main.querySelectorAll("[data-message-author-role='assistant']");
+      const msgs = document.querySelectorAll("[data-message-author-role='assistant']");
       if (!msgs.length) return;
 
-      const latestText = msgs[msgs.length - 1].textContent?.trim();
-      if (!latestText) return;
+      const text = msgs[msgs.length - 1].textContent.trim();
+      if (!text) return;
 
-      const log = document.getElementById("dc-log");
+      appendLog("AI: " + text);
 
-      if (lastAiLine) {
-        lastAiLine.textContent = "AI: " + latestText;
-      } else {
-        lastAiLine = document.createElement("div");
-        lastAiLine.textContent = "AI: " + latestText;
-        lastAiLine.style.color = "#2ecc71";
-        log.appendChild(lastAiLine);
-      }
-
-      log.scrollTop = log.scrollHeight;
-
-      if (latestText === lastAiText) {
+      if (text === lastText) {
         stableCount++;
       } else {
         stableCount = 0;
-        lastAiText = latestText;
+        lastText = text;
       }
+
+      debugUI({ stableCount, length: text.length });
 
       if (stableCount > 5) {
-        saveLog("チャッピー", latestText);
-        lastAiLine = null;
+        saveLog("チャッピー", text);
       }
-    }
 
-    const observer = new MutationObserver(() => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(process);
     });
 
-    observer.observe(main, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // =========================
-  // ■ ドラッグ
+  // ■ 軽量ドラッグ（PCのみ）
   // =========================
   function enableDrag(box) {
-    const header = box.querySelector("#dc-header");
+    const header = document.getElementById("dc-header");
 
     let dragging = false;
     let offsetX = 0;
     let offsetY = 0;
 
+    let posX = 0, posY = 0;
+    let targetX = 0, targetY = 0;
+
     header.addEventListener("mousedown", (e) => {
       dragging = true;
-      offsetX = e.clientX - box.offsetLeft;
-      offsetY = e.clientY - box.offsetTop;
+      offsetX = e.clientX - targetX;
+      offsetY = e.clientY - targetY;
     });
 
     document.addEventListener("mousemove", (e) => {
       if (!dragging) return;
-      box.style.left = (e.clientX - offsetX) + "px";
-      box.style.top = (e.clientY - offsetY) + "px";
+      targetX = e.clientX - offsetX;
+      targetY = e.clientY - offsetY;
     });
 
     document.addEventListener("mouseup", () => dragging = false);
+
+    function loop() {
+      posX += (targetX - posX) * 0.3;
+      posY += (targetY - posY) * 0.3;
+      box.style.transform = `translate(${posX}px, ${posY}px)`;
+      requestAnimationFrame(loop);
+    }
+    loop();
   }
 
   // =========================
@@ -268,7 +311,6 @@ ${buildContext()}
     observeAI();
   }
 
-  setTimeout(init, 1200);
+  setTimeout(init, 1500);
 
 })();
-```
