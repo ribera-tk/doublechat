@@ -1,4 +1,4 @@
-
+```javascript
 // ==UserScript==
 // @name         DoubleChat v14.2 Clean
 // @match        https://chatgpt.com/*
