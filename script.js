@@ -11,8 +11,8 @@
   let aiSaveTimer = null;
   let aiObserveTimer = null;
 
-  // 🌟 【1の修正：手元のメモ帳と管理変数】
-  let conversationLog = []; // 📝 内部ログバッファ（手元のメモ帳）
+  // 📝 【1の修正】ジェミーの形に、手元のメモ帳（バッファ）だけを素直に用意
+  let conversationLog = []; 
   let queue = [];
   let isProcessing = false;
   let lastHash = "";
@@ -21,7 +21,7 @@
   // 📊 GASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
-  // 🔒 重複を完全にブロックするハッシュ関数
+  // 🔒 重複ブロック用ハッシュ関数
   function getHash(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -32,7 +32,7 @@
     return hash.toString();
   }
 
-  // ⛓️ 順番通りにタスクを実行するキューシステム
+  // ⛓️ キューシステム
   async function enqueue(task) {
     queue.push(task);
     if (!isProcessing) {
@@ -53,14 +53,14 @@
     isProcessing = false;
   }
 
-  // 🛠️ UIの作成
+  // 🛠️ UI作成
   function createUI() {
     if (document.getElementById("dc-root")) return;
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v14.1
+        DoubleChat v14.2
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -131,12 +131,10 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  // 📝 メモ帳（バッファ）に書き込みつつ、日記帳（GAS）にも送る関数
+  // 📝 【1の修正】手元のメモ帳（バッファ）に同時保存しつつ、日記（GAS）に送る
   function saveLog(role, content) {
-    // 1. 手元のメモ帳（バッファ）に保存
-    conversationLog.push({ role: role, content: content });
+    conversationLog.push({ role, content }); 
 
-    // 2. 日記帳（GAS）に送信
     if (!GAS_URL || typeof GM_xmlhttpRequest === "undefined") return;
     GM_xmlhttpRequest({
       method: "GET",
@@ -145,22 +143,13 @@
     });
   }
 
-  // 🤖 ジェミー呼び出し（引数はシンプルに2つに固定）
-  function callGemini(text, callback) {
+  // 🤖 ジェミーオリジナルの引数3つの綺麗な形を完全復元
+  function callGemini(text, gptText, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
     
-    // 🌟 画面（DOM）は見ず、手元のメモ帳から直近のチャッピーの回答を取得
-    let chappyLatestResponse = "（まだ回答なし）";
-    for (let i = conversationLog.length - 1; i >= 0; i--) {
-      if (conversationLog[i].role === "チャッピー") {
-        chappyLatestResponse = conversationLog[i].content;
-        break;
-      }
-    }
-
     const customPrompt = `
 【指示】${text}
-【チャッピーの回答】${chappyLatestResponse}
+【チャッピーの回答】${gptText || "（まだ回答なし）"}
 上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
 `.trim();
 
@@ -246,7 +235,6 @@
 
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
-        // ⏳ 1.5秒間文字が変化しなければ「確定」
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
           const currentHash = getHash(text);
@@ -255,7 +243,6 @@
 
           last.removeAttribute("data-dc-observing");
 
-          // 🌟 メモ帳と日記帳に同時に書き込み
           enqueue(async () => {
             saveLog("チャッピー", text);
           });
@@ -266,8 +253,8 @@
             
             enqueue(async () => {
               await new Promise((resolve) => {
-                // 🌟 引数はシンプルに元の形へ。callGeminiの内部で自動でメモ帳を読みます
-                callGemini(queryToGemini, (reply) => {
+                // 🟢 ジェミーの指示通り、確定したチャッピーの回答（text）を第2引数へストレートにバトンタッチ！
+                callGemini(queryToGemini, text, (reply) => {
                   const dcLog = document.getElementById("dc-log");
                   if (dcLog) {
                     const line = document.createElement("div");
@@ -317,7 +304,7 @@
     createUI();
     observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v14.1 安定版起動</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v14.2 復元完了</div>';
   }
 
   setTimeout(bootstrap, 1500);
