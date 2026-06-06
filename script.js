@@ -8,7 +8,7 @@
   'use strict';
 
   // 🌟 バージョン一括管理（ここを変更すればUI、起動ログ、日記帳すべてに反映）
-  const DC_VERSION = "14.2.4";
+  const DC_VERSION = "14.2.５";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -204,7 +204,7 @@
     }
   }
 
-  function observeAI() {
+    function observeAI() {
     const targetEl = document.querySelector("main") || document.body;
 
     const observer = new MutationObserver((mutations) => {
@@ -217,6 +217,14 @@
         }
       }
       if (!hasChatGPTUpdate) return;
+
+      // 🛑 【新方式】チャッピーがまだ出力中（ストップボタンが存在する）なら完全にスキップ
+      const isGenerating = document.querySelector("button[data-testid*='stop-button']") || 
+                           document.querySelector("main button[aria-label*='Stop']");
+      if (isGenerating) {
+        clearTimeout(aiSaveTimer); // 出力中は確定タイマーを常にリセット
+        return; 
+      }
 
       if (aiObserveTimer) return;
       aiObserveTimer = setTimeout(() => {
@@ -254,16 +262,17 @@
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
         clearTimeout(aiSaveTimer);
-        // ⚡ 【爆速化のキモ①】確定タイマーを600msに縮めて、チャッピー終了後の隙を極限までカット
+        // ⚡ ストップボタンが消えた（＝完全に出力が終了した）ので、わずか300msの猶予で即座にジェミーへパス！
         aiSaveTimer = setTimeout(() => {
+          // 念のため、この瞬間にストップボタンが復活していないか最終確認
+          if (document.querySelector("button[data-testid*='stop-button']")) return;
+
           const currentHash = getHash(text);
           if (currentHash === lastHash) return;
           lastHash = currentHash;
 
           last.removeAttribute("data-dc-observing");
 
-          // ⚡ 【爆速化のキモ②】日記帳への保存処理をキュー（直列待ち）から完全に除外！
-          // これにより、通信がどれだけ詰まろうが、ジェミーの起動が足止めされなくなる。
           saveLog("チャッピー", text);
 
           if (currentUserQuery) {
@@ -289,11 +298,12 @@
               });
             });
           }
-        }, 600); 
+        }, 300); // ⚡ 終了検知が正確なので、ここは300msで安全かつ超爆速になる
       }, 150);
     });
     observer.observe(targetEl, { childList: true, subtree: true });
   }
+
 
   function enableDrag() {
     const box = document.getElementById("dc-root");
