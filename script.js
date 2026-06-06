@@ -1,5 +1,6 @@
+
 // ==UserScript==
-// @name         DoubleChat v14.2
+// @name         DoubleChat v14.2 Clean
 // @match        https://chatgpt.com/*
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
@@ -7,62 +8,53 @@
 (function () {
   'use strict';
 
-  // =========================
-  // ■ 設定
-  // =========================
-  const DC_VERSION = "v14.2";
+  const DC_VERSION = "v14.2C";
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
   // =========================
-  // ■ 端末判定（ハイブリッド）
+  // ■ 端末判定
   // =========================
   function getDeviceMode() {
     const ua = navigator.userAgent;
     const isMobileUA = /Android|iPhone|iPad/i.test(ua);
     const isTouch = 'ontouchstart' in window;
     const smallScreen = window.innerWidth < 768;
-
-    if (isMobileUA || (isTouch && smallScreen)) return "mobile";
-    return "desktop";
+    return (isMobileUA || (isTouch && smallScreen)) ? "mobile" : "desktop";
   }
 
   const DEVICE_MODE = getDeviceMode();
   const DEBUG = DEVICE_MODE === "desktop";
 
-  function debugLog(label, data) {
+  function debug(label, data) {
     if (!DEBUG) return;
-    console.log(`[DC DEBUG] ${label}`, data);
+    console.log("[DC]", label, data);
   }
 
   // =========================
-  // ■ マギログ
+  // ■ ログ
   // =========================
   const conversationLog = [];
 
-  function addLog(role, content, type = "message") {
+  function addLog(role, content) {
     const log = {
-      id: "msg-" + Date.now(),
-      turn: conversationLog.length + 1,
       role,
-      type,
       content,
-      timestamp: Date.now()
+      time: Date.now()
     };
     conversationLog.push(log);
-    debugLog("ADD_LOG", log);
     return log;
   }
 
-  function buildContext() {
-    return conversationLog
-      .slice(-6)
-      .map(l => `[${l.role}] ${l.content}`)
-      .join("\n");
-  }
+ function buildContext() {
+  return conversationLog.slice(-6)
+    .map(function(l) {
+      return "[" + l.role + "] " + l.content;
+    })
+    .join("\n");
+}
 
   function saveLog(role, content) {
     addLog(role, content);
-
     GM_xmlhttpRequest({
       method: "GET",
       url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content)
@@ -70,98 +62,76 @@
   }
 
   // =========================
-  // ■ UI生成
+  // ■ UI
   // =========================
-  function createUI() {
-    if (document.getElementById("dc-root")) return;
+function createUI() {
+  if (document.getElementById("dc-root")) return;
 
-    const root = document.createElement("div");
-    root.id = "dc-root";
+  const root = document.createElement("div");
+  root.id = "dc-root";
 
-    root.innerHTML = `
-      <div id="dc-header">
-        DoubleChat ${DC_VERSION} (${DEVICE_MODE})
-      </div>
-      <div id="dc-body">
-        <div id="dc-log"></div>
-        <textarea id="dc-input" placeholder="入力..."></textarea>
-        <button id="dc-send">送信</button>
-        ${DEBUG ? '<div id="dc-debug"></div>' : ''}
-      </div>
-    `;
+  // ★ 文字列連結に変更（安全）
+  let html = "";
+  html += '<div id="dc-header">DoubleChat ' + DC_VERSION + ' (' + DEVICE_MODE + ')</div>';
+  html += '<div id="dc-body">';
+  html += '<div id="dc-log"></div>';
+  html += '<textarea id="dc-input"></textarea>';
+  html += '<button id="dc-send">送信</button>';
 
-    document.body.appendChild(root);
+  if (DEBUG) {
+    html += '<div id="dc-debug"></div>';
+  }
 
-    // ================= CSS
-    const style = document.createElement("style");
-    style.innerHTML = `
-      #dc-root {
-        position: fixed;
-        top: 70px;
-        right: 10px;
-        width: 320px;
-        background: rgba(255,255,255,0.95);
-        z-index: 9999;
-        border-radius: 10px;
-        font-family: Arial;
-      }
+  html += '</div>';
 
-      #dc-header {
-        padding: 10px;
-        font-weight: bold;
-        border-bottom: 1px solid #ccc;
-      }
+  root.innerHTML = html;
 
-      #dc-body {
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        height: 300px;
-      }
+  document.body.appendChild(root);
 
-      #dc-log {
-        flex-grow: 1;
-        overflow-y: auto;
-        font-size: 12px;
-        border: 1px solid #ddd;
-        margin-bottom: 6px;
-      }
-
-      #dc-input {
-        height: 60px;
-      }
-
-      #dc-debug {
-        font-size: 10px;
-        color: #999;
-        margin-top: 5px;
-      }
-
-      /* モバイル最適化 */
-      .dc-mobile {
-        width: 100vw !important;
-        height: 100dvh !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: auto !important;
-        border-radius: 0 !important;
-      }
-    `;
-    document.head.appendChild(style);
-
-    // モード適用
-    if (DEVICE_MODE === "mobile") {
-      root.classList.add("dc-mobile");
-    } else {
-      enableDrag(root);
+  // CSS
+  const style = document.createElement("style");
+  style.textContent = `
+    #dc-root {
+      position: fixed;
+      top: 60px;
+      right: 10px;
+      width: 320px;
+      background: #fff;
+      z-index: 9999;
+      border-radius: 10px;
     }
 
-    document.getElementById("dc-send").onclick = send;
+    .dc-mobile {
+      width: 100vw !important;
+      height: 100dvh !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
 
-    // 起動ログ
-    appendLog(`🟢 DoubleChat ${DC_VERSION} 起動 (${DEVICE_MODE})`);
-    saveLog("system", `起動 ${DC_VERSION} ${DEVICE_MODE}`);
+    #dc-body {
+      display: flex;
+      flex-direction: column;
+      height: 300px;
+    }
+
+    #dc-log {
+      flex-grow: 1;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  if (DEVICE_MODE === "mobile") {
+    root.classList.add("dc-mobile");
+  } else {
+    enableDrag(root);
   }
+
+  document.getElementById("dc-send").onclick = send;
+
+  appendLog("🟢 起動 " + DC_VERSION);
+}
 
   function appendLog(text) {
     const log = document.getElementById("dc-log");
@@ -171,29 +141,15 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  function debugUI(data) {
-    if (!DEBUG) return;
-    const el = document.getElementById("dc-debug");
-    if (el) el.textContent = JSON.stringify(data, null, 1);
-  }
-
   // =========================
   // ■ Gemini
   // =========================
-  function callGemini(text, callback) {
-
-    const context = buildContext();
-
-    debugLog("GEMINI_CONTEXT", context);
+  function callGemini(userText, callback) {
 
     const prompt = `
-【会話ログ】
-${context}
+${buildContext()}
 
-【指示】
-${text}
-
-チャッピーの回答を補足して
+指示: ${userText}
 `;
 
     GM_xmlhttpRequest({
@@ -212,95 +168,106 @@ ${text}
   // =========================
   // ■ 送信
   // =========================
-  async function send() {
+  function send() {
     const input = document.getElementById("dc-input");
-    const text = input.value.trim();
-    if (!text) return;
+    const userText = input.value.trim();
+    if (!userText) return;
 
-    appendLog("YOU: " + text);
-    addLog("user", text);
+    appendLog("YOU: " + userText);
+    addLog("user", userText);
     input.value = "";
 
-    callGemini(text, (reply) => {
+    callGemini(userText, (reply) => {
       appendLog("Gemini: " + reply);
       saveLog("ジェミー", reply);
     });
 
     const ta = document.querySelector("main textarea");
-    ta.value = text;
+    ta.value = userText;
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     document.querySelector("button[data-testid='send-button']")?.click();
   }
 
   // =========================
-  // ■ AI監視（安定検知）
+  // ■ AI監視（完全安定版）
   // =========================
-  let lastText = "";
-  let stableCount = 0;
-
   function observeAI() {
-    const observer = new MutationObserver(() => {
 
-      const msgs = document.querySelectorAll("[data-message-author-role='assistant']");
+    const main = document.querySelector("main");
+    if (!main) return;
+
+    let lastAiText = "";
+    let stableCount = 0;
+    let lastAiLine = null;
+    let ticking = false;
+
+    function process() {
+      ticking = false;
+
+      const msgs = main.querySelectorAll("[data-message-author-role='assistant']");
       if (!msgs.length) return;
 
-      const text = msgs[msgs.length - 1].textContent.trim();
-      if (!text) return;
+      const latestText = msgs[msgs.length - 1].textContent?.trim();
+      if (!latestText) return;
 
-      appendLog("AI: " + text);
+      const log = document.getElementById("dc-log");
 
-      if (text === lastText) {
+      if (lastAiLine) {
+        lastAiLine.textContent = "AI: " + latestText;
+      } else {
+        lastAiLine = document.createElement("div");
+        lastAiLine.textContent = "AI: " + latestText;
+        lastAiLine.style.color = "#2ecc71";
+        log.appendChild(lastAiLine);
+      }
+
+      log.scrollTop = log.scrollHeight;
+
+      if (latestText === lastAiText) {
         stableCount++;
       } else {
         stableCount = 0;
-        lastText = text;
+        lastAiText = latestText;
       }
-
-      debugUI({ stableCount, length: text.length });
 
       if (stableCount > 5) {
-        saveLog("チャッピー", text);
+        saveLog("チャッピー", latestText);
+        lastAiLine = null;
       }
+    }
 
+    const observer = new MutationObserver(() => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(process);
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(main, { childList: true, subtree: true });
   }
 
   // =========================
-  // ■ 軽量ドラッグ（PCのみ）
+  // ■ ドラッグ
   // =========================
   function enableDrag(box) {
-    const header = document.getElementById("dc-header");
+    const header = box.querySelector("#dc-header");
 
     let dragging = false;
     let offsetX = 0;
     let offsetY = 0;
 
-    let posX = 0, posY = 0;
-    let targetX = 0, targetY = 0;
-
     header.addEventListener("mousedown", (e) => {
       dragging = true;
-      offsetX = e.clientX - targetX;
-      offsetY = e.clientY - targetY;
+      offsetX = e.clientX - box.offsetLeft;
+      offsetY = e.clientY - box.offsetTop;
     });
 
     document.addEventListener("mousemove", (e) => {
       if (!dragging) return;
-      targetX = e.clientX - offsetX;
-      targetY = e.clientY - offsetY;
+      box.style.left = (e.clientX - offsetX) + "px";
+      box.style.top = (e.clientY - offsetY) + "px";
     });
 
     document.addEventListener("mouseup", () => dragging = false);
-
-    function loop() {
-      posX += (targetX - posX) * 0.3;
-      posY += (targetY - posY) * 0.3;
-      box.style.transform = `translate(${posX}px, ${posY}px)`;
-      requestAnimationFrame(loop);
-    }
-    loop();
   }
 
   // =========================
@@ -311,6 +278,7 @@ ${text}
     observeAI();
   }
 
-  setTimeout(init, 1500);
+  setTimeout(init, 1200);
 
 })();
+```
