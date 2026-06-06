@@ -7,11 +7,13 @@
 (function () {
   'use strict';
 
+  // 🌟 バージョン一括管理（ここを変更すればUI、起動ログ、日記帳すべてに反映）
+  const DC_VERSION = "14.2.4";
+
   let isSending = false;
   let aiSaveTimer = null;
   let aiObserveTimer = null;
 
-  // 📝 【1の修正】ジェミーの形に、手元のメモ帳（バッファ）だけを素直に用意
   let conversationLog = []; 
   let queue = [];
   let isProcessing = false;
@@ -60,7 +62,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v14.2.3
+        DoubleChat v${DC_VERSION}
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -131,19 +133,23 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  // 📝 【1の修正】手元のメモ帳（バッファ）に同時保存しつつ、日記（GAS）に送る
+  // 📝 手元のメモ帳に保存しつつ、日記（GAS）に送る
   function saveLog(role, content) {
     conversationLog.push({ role, content }); 
 
     if (!GAS_URL || typeof GM_xmlhttpRequest === "undefined") return;
+
+    // 🌟 日記帳（シート）に書き込まれる内容の先頭に [v14.2.2] を自動付与！
+    const logWithVersion = `[v${DC_VERSION}] ${content}`;
+
     GM_xmlhttpRequest({
       method: "GET",
-      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
+      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(logWithVersion) + "&_=" + Date.now(),
       onload: function(res) { console.log("Log saved:", res.responseText); }
     });
   }
 
-  // 🤖 ジェミーオリジナルの引数3つの綺麗な形を完全復元
+  // 🤖 ジェミーの通信
   function callGemini(text, gptText, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
     
@@ -199,12 +205,9 @@
   }
 
   function observeAI() {
-    // 🎯 ターゲットを画面全体(body)から会話エリア(main)に絞って負荷を激減
     const targetEl = document.querySelector("main") || document.body;
 
     const observer = new MutationObserver((mutations) => {
-      
-      // 🛡️ ガードマン：DoubleChat自身の小窓の変化ならタイマーをリセットしない
       let hasChatGPTUpdate = false;
       const dcRoot = document.getElementById("dc-root");
       for (const m of mutations) {
@@ -250,8 +253,8 @@
 
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
-        // ⏳ タイマーを少しだけ短縮（1.5秒 → 1.2秒）して反応速度をアップ
         clearTimeout(aiSaveTimer);
+        // ⚡ 【爆速化のキモ①】確定タイマーを600msに縮めて、チャッピー終了後の隙を極限までカット
         aiSaveTimer = setTimeout(() => {
           const currentHash = getHash(text);
           if (currentHash === lastHash) return;
@@ -259,9 +262,9 @@
 
           last.removeAttribute("data-dc-observing");
 
-          enqueue(async () => {
-            saveLog("チャッピー", text);
-          });
+          // ⚡ 【爆速化のキモ②】日記帳への保存処理をキュー（直列待ち）から完全に除外！
+          // これにより、通信がどれだけ詰まろうが、ジェミーの起動が足止めされなくなる。
+          saveLog("チャッピー", text);
 
           if (currentUserQuery) {
             const queryToGemini = currentUserQuery;
@@ -286,11 +289,9 @@
               });
             });
           }
-        }, 1200); // ⚡ ここを1200に変更
+        }, 600); 
       }, 150);
     });
-    
-    // ターゲットを絞って監視開始
     observer.observe(targetEl, { childList: true, subtree: true });
   }
 
@@ -321,7 +322,7 @@
     createUI();
     observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v14.2.3</div>';
+    if (log) log.innerHTML = `<div style="color:#0a84ff">🟢 DoubleChat v${DC_VERSION} 起動完了</div>`;
   }
 
   setTimeout(bootstrap, 1500);
