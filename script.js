@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         DoubleChat
+// @name         DoubleChat v14.2.2
 // @match        https://chatgpt.com/*
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const DC_VERSION = "v14.2.1";
+  const DC_VERSION = "14.2.2";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -52,7 +52,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat ${DC_VERSION}
+        DoubleChat v${DC_VERSION}
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -70,7 +70,6 @@
     style.innerHTML = `
       #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; }
       #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; border-bottom: 1px solid #ccc; }
-      #dc-controls { display: flex; gap: 15px; }
       #dc-body { padding: 10px; display: flex; flex-direction: column; }
       #dc-log { height: 120px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
       #dc-input { height: 60px; margin-bottom: 6px; }
@@ -98,6 +97,7 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  // ★ バージョン付きログ送信
   function saveLog(role, content) {
     conversationLog.push({ role, content });
 
@@ -105,7 +105,12 @@
 
     GM_xmlhttpRequest({
       method: "GET",
-      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now()
+      url:
+        GAS_URL +
+        "?role=" + encodeURIComponent(role) +
+        "&content=" + encodeURIComponent(content) +
+        "&ver=" + DC_VERSION +
+        "&_=" + Date.now()
     });
   }
 
@@ -177,17 +182,11 @@
 
           saveLog("チャッピー", text);
 
-          // ★ 安定取得（メモ帳優先）
-          const lastChat = [...conversationLog].reverse()
-            .find(l => l.role === "チャッピー");
-
-          const stableText = lastChat?.content || text;
-
           if (currentUserQuery) {
             const q = currentUserQuery;
             currentUserQuery = "";
 
-            callGemini(q, stableText, (reply) => {
+            callGemini(q, text, (reply) => {
               appendLog("Gemini: " + reply);
               saveLog("ジェミー", reply);
             });
@@ -225,8 +224,7 @@
     createUI();
     observeAI();
 
-    // ★ 起動ログ（ちゃっぴー式）
-    appendLog("🟢 起動 " + DC_VERSION);
+    appendLog("🟢 起動 v" + DC_VERSION);
   }
 
   setTimeout(bootstrap, 1500);
