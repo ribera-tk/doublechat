@@ -62,74 +62,66 @@
   // =========================
   // ■ UI
   // =========================
-function createUI() {
-  if (document.getElementById("dc-root")) return;
+  function createUI() {
+    if (document.getElementById("dc-root")) return;
 
-  const root = document.createElement("div");
-  root.id = "dc-root";
+    const root = document.createElement("div");
+    root.id = "dc-root";
 
-  // ★ 文字列連結に変更（安全）
-  let html = "";
-  html += '<div id="dc-header">DoubleChat ' + DC_VERSION + ' (' + DEVICE_MODE + ')</div>';
-  html += '<div id="dc-body">';
-  html += '<div id="dc-log"></div>';
-  html += '<textarea id="dc-input"></textarea>';
-  html += '<button id="dc-send">送信</button>';
+    root.innerHTML = `
+      <div id="dc-header">DoubleChat ${DC_VERSION} (${DEVICE_MODE})</div>
+      <div id="dc-body">
+        <div id="dc-log"></div>
+        <textarea id="dc-input"></textarea>
+        <button id="dc-send">送信</button>
+      </div>
+    `;
 
-  if (DEBUG) {
-    html += '<div id="dc-debug"></div>';
+    document.body.appendChild(root);
+
+    const style = document.createElement("style");
+    style.innerHTML = `
+      #dc-root {
+        position: fixed;
+        top: 60px;
+        right: 10px;
+        width: 320px;
+        background: #fff;
+        z-index: 9999;
+        border-radius: 10px;
+      }
+
+      .dc-mobile {
+        width: 100vw !important;
+        height: 100dvh !important;
+        top: 0 !important;
+        left: 0 !important;
+      }
+
+      #dc-body {
+        display: flex;
+        flex-direction: column;
+        height: 300px;
+      }
+
+      #dc-log {
+        flex-grow: 1;
+        overflow-y: auto;
+        font-size: 12px;
+      }
+    `;
+    document.head.appendChild(style);
+
+    if (DEVICE_MODE === "mobile") {
+      root.classList.add("dc-mobile");
+    } else {
+      enableDrag(root);
+    }
+
+    document.getElementById("dc-send").onclick = send;
+
+    appendLog("🟢 起動 " + DC_VERSION);
   }
-
-  html += '</div>';
-
-  root.innerHTML = html;
-
-  document.body.appendChild(root);
-
-  // CSS
-  const style = document.createElement("style");
-  style.textContent = `
-    #dc-root {
-      position: fixed;
-      top: 60px;
-      right: 10px;
-      width: 320px;
-      background: #fff;
-      z-index: 9999;
-      border-radius: 10px;
-    }
-
-    .dc-mobile {
-      width: 100vw !important;
-      height: 100dvh !important;
-      top: 0 !important;
-      left: 0 !important;
-    }
-
-    #dc-body {
-      display: flex;
-      flex-direction: column;
-      height: 300px;
-    }
-
-    #dc-log {
-      flex-grow: 1;
-      overflow-y: auto;
-      font-size: 12px;
-    }
-  `;
-  document.head.appendChild(style);
-
-  if (DEVICE_MODE === "mobile") {
-    root.classList.add("dc-mobile");
-  } else {
-    enableDrag(root);
-  }
-
-  document.getElementById("dc-send").onclick = send;
-
-  appendLog("🟢 起動 " + DC_VERSION);
-}
 
   function appendLog(text) {
     const log = document.getElementById("dc-log");
