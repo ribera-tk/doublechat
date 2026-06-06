@@ -60,7 +60,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v14.2
+        DoubleChat v14.2.3
         <div id="dc-controls">
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
@@ -199,7 +199,22 @@
   }
 
   function observeAI() {
-    const observer = new MutationObserver(() => {
+    // 🎯 ターゲットを画面全体(body)から会話エリア(main)に絞って負荷を激減
+    const targetEl = document.querySelector("main") || document.body;
+
+    const observer = new MutationObserver((mutations) => {
+      
+      // 🛡️ ガードマン：DoubleChat自身の小窓の変化ならタイマーをリセットしない
+      let hasChatGPTUpdate = false;
+      const dcRoot = document.getElementById("dc-root");
+      for (const m of mutations) {
+        if (!dcRoot || !dcRoot.contains(m.target)) {
+          hasChatGPTUpdate = true;
+          break;
+        }
+      }
+      if (!hasChatGPTUpdate) return;
+
       if (aiObserveTimer) return;
       aiObserveTimer = setTimeout(() => {
         aiObserveTimer = null;
@@ -235,6 +250,7 @@
 
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
+        // ⏳ タイマーを少しだけ短縮（1.5秒 → 1.2秒）して反応速度をアップ
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
           const currentHash = getHash(text);
@@ -253,7 +269,6 @@
             
             enqueue(async () => {
               await new Promise((resolve) => {
-                // 🟢 ジェミーの指示通り、確定したチャッピーの回答（text）を第2引数へストレートにバトンタッチ！
                 callGemini(queryToGemini, text, (reply) => {
                   const dcLog = document.getElementById("dc-log");
                   if (dcLog) {
@@ -271,10 +286,12 @@
               });
             });
           }
-        }, 1500);
+        }, 1200); // ⚡ ここを1200に変更
       }, 150);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // ターゲットを絞って監視開始
+    observer.observe(targetEl, { childList: true, subtree: true });
   }
 
   function enableDrag() {
@@ -304,7 +321,7 @@
     createUI();
     observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v14.2 復元完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff">🟢 DoubleChat v14.2.3</div>';
   }
 
   setTimeout(bootstrap, 1500);
