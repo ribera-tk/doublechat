@@ -8,7 +8,7 @@
   'use strict';
 
   // 🌟 バージョン一括管理（ここを変更すればUI、起動ログ、日記帳すべてに反映）
-  const DC_VERSION = "14.2.５";
+  const DC_VERSION = "14.2.６";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -54,8 +54,7 @@
     }
     isProcessing = false;
   }
-
-  // 🛠️ UI作成
+  // 🛠️ UI作成（v14.2.6 バグ修正版）
   function createUI() {
     if (document.getElementById("dc-root")) return;
     const root = document.createElement("div");
@@ -81,7 +80,7 @@
       #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; transition: all 0.2s ease; }
       #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; user-select: none; border-bottom: 1px solid #ccc; }
       #dc-controls { display: flex; gap: 15px; }
-      #dc-max, #dc-min { cursor: pointer; font-weight: bold; }
+      #dc-max, #dc-min { cursor: pointer; font-weight: bold; padding: 0 4px; }
       #dc-body { padding: 10px; display: flex; flex-direction: column; }
       #dc-log { display: flex; flex-direction: column; height: 120px; overflow-y: auto; background: rgba(255,255,255,0.8); border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
       #dc-input { width: 100%; height: 60px; margin-bottom: 6px; box-sizing: border-box; resize: vertical; }
@@ -96,25 +95,40 @@
     document.getElementById("dc-send").onclick = send;
 
     const minBtn = document.getElementById("dc-min");
+    const maxBtn = document.getElementById("dc-max");
     const body = document.getElementById("dc-body");
+
+    // 🔄 最小化・再表示のトグル
     const toggleMin = (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (body.style.display === "none") { body.style.display = "flex"; minBtn.textContent = "-"; }
-      else { body.style.display = "none"; minBtn.textContent = "+"; }
+      if (body.style.display === "none") { 
+        body.style.display = "flex"; 
+        minBtn.textContent = "-"; 
+      } else { 
+        // 🚨【バグ対策】最小化するときに、最大化状態（クラス）を強制解除して安全に着地させる
+        root.classList.remove("dc-maximized");
+        body.style.display = "none"; 
+        minBtn.textContent = "+"; 
+      }
     };
-    minBtn.addEventListener("touchstart", toggleMin, { passive: false });
-    minBtn.addEventListener("click", toggleMin);
 
-    const maxBtn = document.getElementById("dc-max");
+    // 🔄 最大化のトグル
     const toggleMax = (e) => {
       e.preventDefault(); e.stopPropagation();
+      // もし最小化中（閉じた状態）なら、最大化ボタンは反応させない
+      if (body.style.display === "none") return;
       root.classList.toggle("dc-maximized");
     };
+
+    // タッチとクリックの競合を防ぎつつイベント登録
+    minBtn.addEventListener("touchstart", toggleMin, { passive: false });
+    minBtn.addEventListener("click", toggleMin);
     maxBtn.addEventListener("touchstart", toggleMax, { passive: false });
     maxBtn.addEventListener("click", toggleMax);
 
     enableDrag();
   }
+
 
   function appendLog(text) {
     const log = document.getElementById("dc-log");
