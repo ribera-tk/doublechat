@@ -8,7 +8,7 @@
   'use strict';
 
   // 🌟 バージョン一括管理
-  const DC_VERSION = "14.2.8";
+  const DC_VERSION = "14.3.0";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -19,6 +19,23 @@
   let isProcessing = false;
   let lastHash = "";
   let currentUserQuery = ""; 
+
+  // 🎨 モード管理システム
+  let currentMode = "normal"; // "normal", "present", "debate"
+  const MODES = {
+    normal: {
+      label: "通常",
+      prompt: "上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。"
+    },
+    present: {
+      label: "プレゼン",
+      prompt: "チャッピーの回答から「結論」と「要点」のみを抽出し、前提や解説はすべて省いて、数行でズバッと答えのみを出力せよ。日本語で。提案は抑えめに。"
+    },
+    debate: {
+      label: "討論",
+      prompt: "チャッピーの回答に対し、あえて異なる視点や客観的な反論・改善点を1点提示し、議論を深めるための鋭い問いかけを行え。日本語で。提案は抑えめに。"
+    }
+  };
 
   // 📊 GASウェブアプリURL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
@@ -64,6 +81,7 @@
       <div id="dc-header">
         DoubleChat v${DC_VERSION}
         <div id="dc-controls">
+          <span id="dc-mode">通常</span>
           <span id="dc-max">□</span>
           <span id="dc-min">-</span>
         </div>
@@ -80,7 +98,8 @@
     style.innerHTML = `
       #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; transition: all 0.2s ease; }
       #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; user-select: none; border-bottom: 1px solid #ccc; }
-      #dc-controls { display: flex; gap: 15px; }
+      #dc-controls { display: flex; gap: 15px; align-items: center; }
+      #dc-mode { cursor: pointer; font-size: 11px; background: #0a84ff; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; user-select: none; }
       #dc-max, #dc-min { cursor: pointer; font-weight: bold; padding: 0 4px; }
       #dc-body { padding: 10px; display: flex; flex-direction: column; }
       #dc-log { display: flex; flex-direction: column; height: 120px; overflow-y: auto; background: rgba(255,255,255,0.8); border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
@@ -97,8 +116,10 @@
 
     const minBtn = document.getElementById("dc-min");
     const maxBtn = document.getElementById("dc-max");
+    const modeBtn = document.getElementById("dc-mode");
     const body = document.getElementById("dc-body");
 
+    // 🔄 ⏰ 最小化・再表示のトグル
     const toggleMin = (e) => {
       e.preventDefault(); e.stopPropagation();
       if (body.style.display === "none") { 
@@ -112,6 +133,7 @@
       }
     };
 
+    // 🔄 ⏰ 最大化のトグル
     const toggleMax = (e) => {
       e.preventDefault(); e.stopPropagation();
       if (body.style.display === "none") {
@@ -123,10 +145,34 @@
       }
     };
 
+    // 🔄 ⏰ 【新機能】プロンプトモード切替（通常 ➔ プレゼン ➔ 討論）
+    const toggleMode = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (currentMode === "normal") currentMode = "present";
+      else if (currentMode === "present") currentMode = "debate";
+      else currentMode = "normal";
+
+      modeBtn.textContent = MODES[currentMode].label;
+      
+      // 🟢 ログに緑文字で現在のモードを表示
+      const log = document.getElementById("dc-log");
+      if (log) {
+        const line = document.createElement("div");
+        line.textContent = `🟢 [${MODES[currentMode].label}モード] に切り替えました`;
+        line.style.color = "#2ecc71";
+        line.style.fontWeight = "bold";
+        line.style.marginBottom = "4px";
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+    };
+
     minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
     maxBtn.addEventListener("touchstart", toggleMax, { passive: false });
     maxBtn.addEventListener("click", toggleMax);
+    modeBtn.addEventListener("touchstart", toggleMode, { passive: false });
+    modeBtn.addEventListener("click", toggleMode);
 
     enableDrag();
   }
@@ -152,7 +198,7 @@
     conversationLog.push({ role, content }); 
     if (!GAS_URL || typeof GM_xmlhttpRequest === "undefined") return;
 
-    const logWithVersion = `[v${DC_VERSION}] ${content}`;
+    const logWithVersion = `[v${DC_VERSION}][${MODES[currentMode].label}] ${content}`;
     GM_xmlhttpRequest({
       method: "GET",
       url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(logWithVersion) + "&_=" + Date.now(),
@@ -163,10 +209,13 @@
   function callGemini(text, gptText, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
     
+    // ⚡ モードに応じて裏のシステムプロンプトを自動選択！
+    const activePrompt = MODES[currentMode].prompt;
+
     const customPrompt = `
 【指示】${text}
 【チャッピーの回答】${gptText || "（まだ回答なし）"}
-上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
+${activePrompt}
 `.trim();
 
     GM_xmlhttpRequest({
@@ -242,7 +291,9 @@
         if (!messages.length) return;
         
         const last = messages[messages.length - 1];
-        const text = last.textContent?.trim();
+        
+        // ⚡ 【監督案】直近の末尾800文字だけをスライスして軽量化！
+        const text = (last.textContent?.trim() || "").slice(-800);
         if (!text || text.length < 10) return;
 
         const log = document.getElementById("dc-log");
@@ -310,16 +361,17 @@
     observer.observe(targetEl, { childList: true, subtree: true });
   }
 
-  // 🛠️ ドラッグ最適化（v14.2.8 もっさり感解消版）
+  // 🛠️ ドラッグ最適化（v14.3.0 完璧安全策版）
   function enableDrag() {
     const box = document.getElementById("dc-root");
     const header = document.getElementById("dc-header");
     let dragging = false; let offsetX = 0; let offsetY = 0;
     
     header.addEventListener("mousedown", (e) => {
-      if (e.target.id === "dc-min" || e.target.id === "dc-max") return;
+      // ⚡ 【監督案】closest を使ってコントロール領域全体を確実にガード！
+      if (e.target.closest("#dc-controls")) return;
       dragging = true; 
-      box.style.transition = "none"; // ⚡ ドラッグ開始時にアニメーションを切って即座に追随させる
+      box.style.transition = "none"; 
       offsetX = e.clientX - box.offsetLeft; 
       offsetY = e.clientY - box.offsetTop;
     });
@@ -334,13 +386,14 @@
     document.addEventListener("mouseup", () => {
       if (!dragging) return;
       dragging = false;
-      box.style.transition = "all 0.2s ease"; // 🔄 ドラッグ終了時にアニメーション設定を戻す
+      box.style.transition = "all 0.2s ease"; 
     });
     
     header.addEventListener("touchstart", (e) => {
-      if (e.target.id === "dc-min" || e.target.id === "max") return;
+      // ⚡ 【監督案】タッチ時も同様に closest で鉄壁ガード！
+      if (e.target.closest("#dc-controls")) return;
       dragging = true; 
-      box.style.transition = "none"; // ⚡ タッチ移動時も同様にアニメーションを即遮断
+      box.style.transition = "none"; 
       const t = e.touches[0]; 
       offsetX = t.clientX - box.offsetLeft; 
       offsetY = t.clientY - box.offsetTop;
@@ -358,7 +411,7 @@
     document.addEventListener("touchend", () => {
       if (!dragging) return;
       dragging = false;
-      box.style.transition = "all 0.2s ease"; // 🔄 終了時に戻す
+      box.style.transition = "all 0.2s ease"; 
     });
   }
 
