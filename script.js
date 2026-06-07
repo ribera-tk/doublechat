@@ -8,7 +8,7 @@
   'use strict';
 
   // 🌟 バージョン一括管理
-  const DC_VERSION = "14.2.7";
+  const DC_VERSION = "14.2.8";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -99,32 +99,26 @@
     const maxBtn = document.getElementById("dc-max");
     const body = document.getElementById("dc-body");
 
-    // 🔄 ⏰ 【新ロジック】最小化・再表示のトグル
     const toggleMin = (e) => {
       e.preventDefault(); e.stopPropagation();
       if (body.style.display === "none") { 
-        // 閉じてる状態（小）から開くときは、安全のため通常サイズ（中）で開く
         root.classList.remove("dc-maximized");
         body.style.display = "flex"; 
         minBtn.textContent = "-"; 
       } else { 
-        // ⚡ 最大化（大）や通常（中）から、一発で強制最小化（小）へワープ！
         root.classList.remove("dc-maximized");
         body.style.display = "none"; 
         minBtn.textContent = "+"; 
       }
     };
 
-    // 🔄 ⏰ 【新ロジック】最大化のトグル
     const toggleMax = (e) => {
       e.preventDefault(); e.stopPropagation();
       if (body.style.display === "none") {
-        // ⚡【ワープ！】閉じている状態（小）から、一気に最大化（大）で叩き開く！
         body.style.display = "flex";
         minBtn.textContent = "-";
         root.classList.add("dc-maximized");
       } else {
-        // 開いているときは、通常（中）と最大（大）を交互に切り替え
         root.classList.toggle("dc-maximized");
       }
     };
@@ -316,26 +310,56 @@
     observer.observe(targetEl, { childList: true, subtree: true });
   }
 
+  // 🛠️ ドラッグ最適化（v14.2.8 もっさり感解消版）
   function enableDrag() {
     const box = document.getElementById("dc-root");
     const header = document.getElementById("dc-header");
     let dragging = false; let offsetX = 0; let offsetY = 0;
+    
     header.addEventListener("mousedown", (e) => {
       if (e.target.id === "dc-min" || e.target.id === "dc-max") return;
-      dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop;
+      dragging = true; 
+      box.style.transition = "none"; // ⚡ ドラッグ開始時にアニメーションを切って即座に追随させる
+      offsetX = e.clientX - box.offsetLeft; 
+      offsetY = e.clientY - box.offsetTop;
     });
+    
     document.addEventListener("mousemove", (e) => {
-      if (!dragging) return; box.style.left = (e.clientX - offsetX) + "px"; box.style.top = (e.clientY - offsetY) + "px"; box.style.right = "auto";
+      if (!dragging) return; 
+      box.style.left = (e.clientX - offsetX) + "px"; 
+      box.style.top = (e.clientY - offsetY) + "px"; 
+      box.style.right = "auto";
     });
-    document.addEventListener("mouseup", () => dragging = false);
+    
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      box.style.transition = "all 0.2s ease"; // 🔄 ドラッグ終了時にアニメーション設定を戻す
+    });
+    
     header.addEventListener("touchstart", (e) => {
-      if (e.target.id === "dc-min" || e.target.id === "dc-max") return;
-      dragging = true; const t = e.touches[0]; offsetX = t.clientX - box.offsetLeft; offsetY = t.clientY - box.offsetTop;
+      if (e.target.id === "dc-min" || e.target.id === "max") return;
+      dragging = true; 
+      box.style.transition = "none"; // ⚡ タッチ移動時も同様にアニメーションを即遮断
+      const t = e.touches[0]; 
+      offsetX = t.clientX - box.offsetLeft; 
+      offsetY = t.clientY - box.offsetTop;
     });
+    
     document.addEventListener("touchmove", (e) => {
-      if (!dragging) return; e.preventDefault(); const t = e.touches[0]; box.style.left = (t.clientX - offsetX) + "px"; box.style.top = (t.clientY - offsetY) + "px"; box.style.right = "auto";
+      if (!dragging) return; 
+      e.preventDefault(); 
+      const t = e.touches[0]; 
+      box.style.left = (t.clientX - offsetX) + "px"; 
+      box.style.top = (t.clientY - offsetY) + "px"; 
+      box.style.right = "auto";
     }, { passive: false });
-    document.addEventListener("touchend", () => dragging = false);
+    
+    document.addEventListener("touchend", () => {
+      if (!dragging) return;
+      dragging = false;
+      box.style.transition = "all 0.2s ease"; // 🔄 終了時に戻す
+    });
   }
 
   function bootstrap() {
