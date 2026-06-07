@@ -7,8 +7,8 @@
 (function () {
   'use strict';
 
-  // 🌟 バージョン一括管理（ここを変更すればUI、起動ログ、日記帳すべてに反映）
-  const DC_VERSION = "14.2.６";
+  // 🌟 バージョン一括管理
+  const DC_VERSION = "14.2.7";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -54,7 +54,8 @@
     }
     isProcessing = false;
   }
-  // 🛠️ UI作成（v14.2.6 バグ修正版）
+
+  // 🛠️ UI作成
   function createUI() {
     if (document.getElementById("dc-root")) return;
     const root = document.createElement("div");
@@ -98,29 +99,36 @@
     const maxBtn = document.getElementById("dc-max");
     const body = document.getElementById("dc-body");
 
-    // 🔄 最小化・再表示のトグル
+    // 🔄 ⏰ 【新ロジック】最小化・再表示のトグル
     const toggleMin = (e) => {
       e.preventDefault(); e.stopPropagation();
       if (body.style.display === "none") { 
+        // 閉じてる状態（小）から開くときは、安全のため通常サイズ（中）で開く
+        root.classList.remove("dc-maximized");
         body.style.display = "flex"; 
         minBtn.textContent = "-"; 
       } else { 
-        // 🚨【バグ対策】最小化するときに、最大化状態（クラス）を強制解除して安全に着地させる
+        // ⚡ 最大化（大）や通常（中）から、一発で強制最小化（小）へワープ！
         root.classList.remove("dc-maximized");
         body.style.display = "none"; 
         minBtn.textContent = "+"; 
       }
     };
 
-    // 🔄 最大化のトグル
+    // 🔄 ⏰ 【新ロジック】最大化のトグル
     const toggleMax = (e) => {
       e.preventDefault(); e.stopPropagation();
-      // もし最小化中（閉じた状態）なら、最大化ボタンは反応させない
-      if (body.style.display === "none") return;
-      root.classList.toggle("dc-maximized");
+      if (body.style.display === "none") {
+        // ⚡【ワープ！】閉じている状態（小）から、一気に最大化（大）で叩き開く！
+        body.style.display = "flex";
+        minBtn.textContent = "-";
+        root.classList.add("dc-maximized");
+      } else {
+        // 開いているときは、通常（中）と最大（大）を交互に切り替え
+        root.classList.toggle("dc-maximized");
+      }
     };
 
-    // タッチとクリックの競合を防ぎつつイベント登録
     minBtn.addEventListener("touchstart", toggleMin, { passive: false });
     minBtn.addEventListener("click", toggleMin);
     maxBtn.addEventListener("touchstart", toggleMax, { passive: false });
@@ -128,7 +136,6 @@
 
     enableDrag();
   }
-
 
   function appendLog(text) {
     const log = document.getElementById("dc-log");
@@ -147,15 +154,11 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  // 📝 手元のメモ帳に保存しつつ、日記（GAS）に送る
   function saveLog(role, content) {
     conversationLog.push({ role, content }); 
-
     if (!GAS_URL || typeof GM_xmlhttpRequest === "undefined") return;
 
-    // 🌟 日記帳（シート）に書き込まれる内容の先頭に [v14.2.2] を自動付与！
     const logWithVersion = `[v${DC_VERSION}] ${content}`;
-
     GM_xmlhttpRequest({
       method: "GET",
       url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(logWithVersion) + "&_=" + Date.now(),
@@ -163,7 +166,6 @@
     });
   }
 
-  // 🤖 ジェミーの通信
   function callGemini(text, gptText, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
     
@@ -218,7 +220,7 @@
     }
   }
 
-    function observeAI() {
+  function observeAI() {
     const targetEl = document.querySelector("main") || document.body;
 
     const observer = new MutationObserver((mutations) => {
@@ -232,11 +234,10 @@
       }
       if (!hasChatGPTUpdate) return;
 
-      // 🛑 【新方式】チャッピーがまだ出力中（ストップボタンが存在する）なら完全にスキップ
       const isGenerating = document.querySelector("button[data-testid*='stop-button']") || 
                            document.querySelector("main button[aria-label*='Stop']");
       if (isGenerating) {
-        clearTimeout(aiSaveTimer); // 出力中は確定タイマーを常にリセット
+        clearTimeout(aiSaveTimer); 
         return; 
       }
 
@@ -276,9 +277,7 @@
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
         clearTimeout(aiSaveTimer);
-        // ⚡ ストップボタンが消えた（＝完全に出力が終了した）ので、わずか300msの猶予で即座にジェミーへパス！
         aiSaveTimer = setTimeout(() => {
-          // 念のため、この瞬間にストップボタンが復活していないか最終確認
           if (document.querySelector("button[data-testid*='stop-button']")) return;
 
           const currentHash = getHash(text);
@@ -286,7 +285,6 @@
           lastHash = currentHash;
 
           last.removeAttribute("data-dc-observing");
-
           saveLog("チャッピー", text);
 
           if (currentUserQuery) {
@@ -312,12 +310,11 @@
               });
             });
           }
-        }, 300); // ⚡ 終了検知が正確なので、ここは300msで安全かつ超爆速になる
+        }, 300); 
       }, 150);
     });
     observer.observe(targetEl, { childList: true, subtree: true });
   }
-
 
   function enableDrag() {
     const box = document.getElementById("dc-root");
