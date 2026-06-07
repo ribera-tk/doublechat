@@ -1,218 +1,187 @@
 // ==UserScript==
-// @name         DoubleChat Full OC v1.0
+// @name         DoubleChat Core v1.0
 // @match        https://chatgpt.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const DC_VERSION = "FULL-1.0";
+  const DC_VERSION = "CORE-1.0";
+  const LOG_LIMIT = 120;
 
-  let uiState = "full"; // full / mini / hidden
-  let currentMode = "normal";
+  let queue = [];
+  let isProcessing = false;
+  let lastHash = "";
+  let currentUserQuery = "";
 
-  const MODES = {
-    normal: "通常",
-    present: "プレゼン",
-    debate: "討論"
-  };
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
+  // =========================
+  // 🧠 キュー制御
+  // =========================
+  async function enqueue(task) {
+    queue.push(task);
+    if (!isProcessing) processQueue();
+  }
+
+  async function processQueue() {
+    isProcessing = true;
+    while (queue.length) {
+      const task = queue.shift();
+      try { await task(); } catch (e) {}
+    }
+    isProcessing = false;
+  }
+
+  // =========================
+  // 🎨 UI
+  // =========================
   function createUI() {
     if (document.getElementById("dc-root")) return;
 
     const root = document.createElement("div");
     root.id = "dc-root";
-
     root.innerHTML = `
-      <div id="dc-header">
-        DoubleChat v${DC_VERSION}
-        <div id="dc-controls">
-          <span id="dc-mode">通常</span>
-          <span id="dc-toggle">⇔</span>
-          <span id="dc-hide">－</span>
-        </div>
-      </div>
-
+      <div id="dc-header">DoubleChat ${DC_VERSION}</div>
       <div id="dc-body">
         <div id="dc-log"></div>
-        <textarea id="dc-input" placeholder="入力..."></textarea>
-        <button id="dc-send">送信</button>
+        <textarea id="dc-input"></textarea>
+        <button id="dc-send">➤</button>
       </div>
     `;
-
     document.body.appendChild(root);
 
     const style = document.createElement("style");
     style.innerHTML = `
-      #dc-root {
-        position: fixed;
-        z-index: 9999;
-        background: #fff;
-        color: #111;
-        font-family: Arial;
-        display: flex;
-        flex-direction: column;
-        border: 1px solid #ccc;
-        transition: all 0.2s ease;
-      }
-
-      #dc-header {
-        padding: 10px;
-        display: flex;
-        justify-content: space-between;
-        font-weight: bold;
-        background: #f5f5f5;
-      }
-
-      #dc-controls {
-        display: flex;
-        gap: 10px;
-      }
-
-      #dc-controls span {
-        cursor: pointer;
-      }
-
-      #dc-mode {
-        background: #0a84ff;
-        color: #fff;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 11px;
-      }
-
-      #dc-body {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-      }
-
-      #dc-log {
-        flex: 1;
-        overflow-y: auto;
-        padding: 6px;
-        border-bottom: 1px solid #ddd;
-      }
-
-      #dc-input {
-        height: 100px;
-        flex-shrink: 0;
-      }
-
-      #dc-send {
-        flex-shrink: 0;
-        padding: 10px;
-      }
-
-      /* フル */
-      .full {
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-      }
-
-      /* 小窓 */
-      .mini {
-        top: 70px;
-        right: 10px;
-        width: 320px;
-        height: 400px;
-      }
-
-      /* 非表示 */
-      .hidden {
-        display: none !important;
-      }
+      #dc-root { position: fixed; right:10px; top:70px; width:320px; background:#fff; z-index:9999; border:1px solid #ccc; border-radius:10px; }
+      #dc-header { padding:8px; font-weight:bold; border-bottom:1px solid #ccc; }
+      #dc-log { height:200px; overflow:auto; padding:5px; font-size:12px; }
+      #dc-input { width:100%; height:60px; }
+      #dc-send { width:100%; }
     `;
     document.head.appendChild(style);
 
-    bindEvents();
-    applyState();
-    log("🟢 起動 " + DC_VERSION);
+    document.getElementById("dc-send").onclick = send;
   }
 
-  function applyState() {
-    const root = document.getElementById("dc-root");
-
-    root.classList.remove("full", "mini", "hidden");
-
-    if (uiState === "full") root.classList.add("full");
-    if (uiState === "mini") root.classList.add("mini");
-    if (uiState === "hidden") root.classList.add("hidden");
+  // =========================
+  // 📝 ログ制御
+  // =========================
+  function enforceLogLimit(logArea) {
+    while (logArea.children.length > LOG_LIMIT) {
+      logArea.removeChild(logArea.children[0]);
+    }
   }
 
-  function bindEvents() {
+  function log(sender, text) {
+    const logArea = document.getElementById("dc-log");
+    if (!logArea) return;
 
-    // 送信（仮）
-    document.getElementById("dc-send").onclick = () => {
-      const input = document.getElementById("dc-input");
-      if (!input.value.trim()) return;
-      log("YOU: " + input.value);
-      log("AI: ダミー応答");
-      input.value = "";
-    };
-
-    // モード
-    document.getElementById("dc-mode").onclick = () => {
-      if (currentMode === "normal") currentMode = "present";
-      else if (currentMode === "present") currentMode = "debate";
-      else currentMode = "normal";
-
-      document.getElementById("dc-mode").textContent = MODES[currentMode];
-      log("🟢 モード: " + MODES[currentMode]);
-    };
-
-    // フル ⇔ 小窓
-    document.getElementById("dc-toggle").onclick = () => {
-      uiState = (uiState === "full") ? "mini" : "full";
-      applyState();
-    };
-
-    // 最小化
-    document.getElementById("dc-hide").onclick = () => {
-      uiState = "hidden";
-      applyState();
-
-      // 画面左下に復帰ボタン
-      createRestoreButton();
-    };
-  }
-
-  function createRestoreButton() {
-    if (document.getElementById("dc-restore")) return;
-
-    const btn = document.createElement("div");
-    btn.id = "dc-restore";
-    btn.textContent = "DC";
-    btn.style.position = "fixed";
-    btn.style.bottom = "20px";
-    btn.style.left = "20px";
-    btn.style.background = "#0a84ff";
-    btn.style.color = "#fff";
-    btn.style.padding = "10px";
-    btn.style.borderRadius = "50%";
-    btn.style.cursor = "pointer";
-    btn.style.zIndex = 9999;
-
-    btn.onclick = () => {
-      uiState = "full";
-      applyState();
-      btn.remove();
-    };
-
-    document.body.appendChild(btn);
-  }
-
-  function log(text) {
-    const log = document.getElementById("dc-log");
     const line = document.createElement("div");
-    line.textContent = text;
-    log.appendChild(line);
-    log.scrollTop = log.scrollHeight;
+    line.textContent = `[${sender}] ${text}`;
+
+    logArea.appendChild(line);
+    enforceLogLimit(logArea);
+
+    logArea.scrollTop = logArea.scrollHeight;
   }
 
-  setTimeout(createUI, 1000);
+  // =========================
+  // 📤 送信（GPT）
+  // =========================
+  async function send() {
+    const input = document.getElementById("dc-input");
+    const text = input.value.trim();
+    if (!text) return;
+
+    log("YOU", text);
+    currentUserQuery = text;
+    input.value = "";
+
+    const target = document.querySelector("main textarea");
+    if (!target) return;
+
+    target.value = text;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const btn = document.querySelector("button[data-testid='send-button']");
+    if (btn) btn.click();
+  }
+
+  // =========================
+  // 🤖 Gemini
+  // =========================
+  function callGemini(text, gptText, callback) {
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: GAS_URL,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({
+        text: `指示:${text}\nGPT:${gptText}\n補足のみ簡潔に`
+      }),
+      onload: function(res) {
+        try {
+          const data = JSON.parse(res.responseText);
+          const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "応答なし";
+          callback(reply);
+        } catch {
+          callback("Geminiエラー");
+        }
+      }
+    });
+  }
+
+  // =========================
+  // 👀 GPT監視（コア）
+  // =========================
+  function observeAI() {
+    const observer = new MutationObserver(() => {
+
+      const isGenerating = document.querySelector("button[data-testid*='stop-button']");
+      if (isGenerating) return;
+
+      const messages = document.querySelectorAll("[data-message-author-role='assistant']");
+      if (!messages.length) return;
+
+      const last = messages[messages.length - 1];
+      const text = last.textContent?.trim();
+      if (!text || text.length < 10) return;
+
+      const hash = text;
+      if (hash === lastHash) return;
+      lastHash = hash;
+
+      log("GPT", text);
+
+      if (currentUserQuery) {
+        const query = currentUserQuery;
+        currentUserQuery = "";
+
+        enqueue(() => new Promise(resolve => {
+          callGemini(query, text, (reply) => {
+            log("Gemini", reply);
+            resolve();
+          });
+        }));
+      }
+
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // =========================
+  // 🚀 起動
+  // =========================
+  function init() {
+    createUI();
+    observeAI();
+    log("SYS", "起動完了");
+  }
+
+  setTimeout(init, 1500);
 
 })();
