@@ -1,55 +1,20 @@
-// == DoubleChat Core Minimal ==
+window.DoubleChatCore = {
 
-(function () {
-  'use strict';
+  init() {
+    console.log("Core init OK");
 
-  let currentMode = "normal";
+    document.addEventListener("dc-request-send", (e) => {
+      const { text, mode } = e.detail;
 
-  // UI → Core：送信
-  document.addEventListener("dc-request-send", async (e) => {
-    const { text, mode } = e.detail;
+      console.log("受信:", text, mode);
 
-    currentMode = mode;
-
-    // UIロック
-    dispatch("dc-lock-ui");
-
-    // ユーザー発言をログ表示
-    dispatch("dc-append-log", {
-      sender: "you",
-      text: text
+      // テスト返信
+      setTimeout(() => {
+        document.dispatchEvent(new CustomEvent("dc-append-log", {
+          detail: { sender: "gpt", text: "Coreから返答：" + text }
+        }));
+      }, 500);
     });
-
-    // ダミー応答（あとでAPIに置き換え）
-    setTimeout(() => {
-      dispatch("dc-append-log", {
-        sender: "gpt",
-        text: `[GPT:${currentMode}] ${text}`
-      });
-      dispatch("dc-play-sound", { type: "reply_gpt" });
-    }, 500);
-
-    setTimeout(() => {
-      dispatch("dc-append-log", {
-        sender: "gemini",
-        text: `[Gemini:${currentMode}] ${text}`
-      });
-      dispatch("dc-play-sound", { type: "reply_gemini" });
-      dispatch("dc-unlock-ui");
-    }, 900);
-  });
-
-  // UI → Core：モード変更
-  document.addEventListener("dc-mode-changed", (e) => {
-    currentMode = e.detail.mode;
-  });
-
-  // Core → UI：共通送信関数
-  function dispatch(name, detail = {}) {
-    document.dispatchEvent(new CustomEvent(name, { detail }));
   }
 
-  // Core起動通知（UI側のフェイルセーフ用）
-  document.dispatchEvent(new CustomEvent("dc-core-ready"));
-
-})();
+};
