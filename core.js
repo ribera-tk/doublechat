@@ -42,6 +42,7 @@ window.DoubleChatCore = {
         }, 500);
       });
     }
+    ｝
   };
 
 })();
