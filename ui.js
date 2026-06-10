@@ -3,7 +3,7 @@
 
   if (window.DoubleChatUI) return;
 
-  const DC_VERSION = "UI-3.5";
+  const DC_VERSION = "UI-3.6";
   const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
   let isFull = false;
@@ -16,7 +16,6 @@
     debate: "討論"
   };
 
-  // 外部から操作するためのUI API
   window.DoubleChatUI = {
     init: function() {
       createUI();
@@ -36,7 +35,7 @@
     }
   };
 
-  // 🔊 サウンドチューニング（にゃ〜ん再現：UI側で維持・Coreのトリガーで鳴るようイベント対応）
+  // 🔊 新・3人用クリーン電子音（にゃ〜ん排除、初期ポン音の系譜）
   function playSound(type) {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -45,35 +44,35 @@
       osc.connect(gain);
       gain.connect(ctx.destination);
 
+      const now = ctx.currentTime;
+
       if (type === 'send') {
+        // 🧑 YOU: キレのある高めの「ピピッ」
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(1567.98, ctx.currentTime);
-        osc.frequency.setValueAtTime(2349.32, ctx.currentTime + 0.05);
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-        osc.start(); osc.stop(ctx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(1567.98, now); // ソ
+        osc.frequency.setValueAtTime(2349.32, now + 0.04); // レ
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start(); osc.stop(now + 0.1);
       }
       else if (type === 'reply_gpt') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(850, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(680, ctx.currentTime + 0.08);
-        osc.frequency.exponentialRampToValueAtTime(480, ctx.currentTime + 0.35);
-
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-        osc.start(); osc.stop(ctx.currentTime + 0.4);
+        // 🤖 ChatGPT: 落ち着いた中音の「ポポン」
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880.00, now); // ラ
+        osc.frequency.setValueAtTime(1174.66, now + 0.05); // レ
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.start(); osc.stop(now + 0.15);
       }
       else if (type === 'reply_gemini') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(1050, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(820, ctx.currentTime + 0.06);
-        osc.frequency.exponentialRampToValueAtTime(580, ctx.currentTime + 0.3);
-
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.06);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.start(); osc.stop(ctx.currentTime + 0.35);
+        // 💎 Gemini: 未来感のある3連音「ピロラン」
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1046.50, now); // ド
+        osc.frequency.setValueAtTime(1318.51, now + 0.04); // ミ
+        osc.frequency.setValueAtTime(1567.98, now + 0.08); // ソ
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+        osc.start(); osc.stop(now + 0.18);
       }
     } catch (e) { console.warn(e); }
   }
@@ -110,7 +109,7 @@
       #dc-root, #dc-root * { box-sizing: border-box !important; }
       #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial, sans-serif; color: #111; transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
       
-      /* 🐱 本体枠の猫耳：左右幅を2mm(約8px)狭めて中央寄りに補正、短文でも潰れないように固定 */
+      /* 本体枠の猫耳：中央寄りに固定 */
       #dc-root::before, #dc-root::after { content: ""; position: absolute; top: -10px; width: 0; height: 0; border-bottom: 12px solid rgba(255,255,255,0.95); z-index: 9998; }
       #dc-root::before { left: 32px; border-left: 8px solid transparent; border-right: 8px solid transparent; }
       #dc-root::after { right: 32px; border-left: 8px solid transparent; border-right: 8px solid transparent; }
@@ -136,24 +135,25 @@
       .you .dc-msg-row { flex-direction: row-reverse; }
       .dc-msg-time { font-size: 9px; color: #999; user-select: none; white-space: nowrap; margin-bottom: 2px; }
       
-      /* 短文でもレイアウト維持する吹き出しの基本定義 */
-      .dc-msg-bubble { position: relative; padding: 8px 14px; border-radius: 16px !important; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.1); z-index: 1; margin-top: 12px; min-width: 44px; }
+      /* 短文（1〜2文字）でも絶対に猫の形が潰れない最小幅の確保 */
+      .dc-msg-bubble { position: relative; padding: 8px 14px; border-radius: 16px !important; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.1); z-index: 1; margin-top: 12px; min-width: 52px; }
       .dc-msg-bubble::before { content: ""; position: absolute; top: -7px; width: 32px; height: 8px; z-index: -1; clip-path: polygon(0% 100%, 20% 0%, 40% 100%, 60% 100%, 80% 0%, 100% 100%); }
-      
-      /* 🐱 吹き出しの猫尻尾（下はね化）: 角度を調整して下側へ綺麗に抜けるラインに変更 */
-      .dc-msg-bubble::after { content: ""; position: absolute; bottom: -3px; width: 8px; height: 12px; z-index: -1; }
+      .dc-msg-bubble::after { content: ""; position: absolute; bottom: 2px; width: 8px; height: 12px; z-index: -1; }
       
       .dc-msg-you { background: #a9e3a3; color: #111; }
-      .dc-msg-wrapper.you .dc-msg-bubble::before { left: 12px; background: #a9e3a3; }
-      .dc-msg-wrapper.you .dc-msg-bubble::after { right: 2px; background: #a9e3a3; border-radius: 5px 0 0 5px; transform: rotate(45deg); }
+      /* 🐱 ユーザー側の耳を左に3mm(約12px)スライド：leftを12pxから0pxに変更して潰れを完全防止 */
+      .dc-msg-wrapper.you .dc-msg-bubble::before { left: 0px; background: #a9e3a3; }
+      /* 🐱 尻尾のハネ内外（細い太い）を修正：外側に向かってピッと細く跳ねるように角度を反転 */
+      .dc-msg-wrapper.you .dc-msg-bubble::after { right: -4px; background: #a9e3a3; border-radius: 5px 0 0 5px; transform: rotate(35deg); }
       
       .dc-msg-gpt { background: #10a37f; color: #fff; }
       .dc-msg-wrapper.gpt .dc-msg-bubble::before { right: 12px; background: #10a37f; }
-      .dc-msg-wrapper.gpt .dc-msg-bubble::after { left: 2px; background: #10a37f; border-radius: 0 5px 5px 0; transform: rotate(-45deg); }
+      /* 🐱 AI側の尻尾も外側に向かって細く跳ねるように角度・曲がり方向を修正 */
+      .dc-msg-wrapper.gpt .dc-msg-bubble::after { left: -4px; background: #10a37f; border-radius: 0 5px 5px 0; transform: rotate(-35deg); }
       
       .dc-msg-gemini { background: #1a73e8; color: #fff; }
       .dc-msg-wrapper.gemini .dc-msg-bubble::before { right: 12px; background: #1a73e8; }
-      .dc-msg-wrapper.gemini .dc-msg-bubble::after { left: 2px; background: #1a73e8; border-radius: 0 5px 5px 0; transform: rotate(-45deg); }
+      .dc-msg-wrapper.gemini .dc-msg-bubble::after { left: -4px; background: #1a73e8; border-radius: 0 5px 5px 0; transform: rotate(-35deg); }
       
       .dc-is-pc #dc-input { width: 100% !important; height: 38px; min-height: 38px; max-height: 150px; padding: 9px 50px 9px 10px !important; resize: none; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; overflow-y: auto; line-height: 1.4; }
       .dc-is-pc #dc-send { position: absolute !important; right: 16px; bottom: 15px; width: 36px; height: 28px; background: #0a84ff; color: white; border: none; border-radius: 4px; cursor: pointer; z-index: 99; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.1s; }
@@ -168,7 +168,6 @@
       .dc-is-mobile.dc-fullscreen #dc-send { display: flex !important; position: absolute !important; right: 15px; bottom: calc(env(safe-area-inset-bottom, 0px) + 2px) !important; width: 48px; height: 85px; background: #0a84ff; color: white; border: none; cursor: pointer; z-index: 99; clip-path: polygon(50% 0%, 100% 18%, 100% 100%, 0% 100%, 0% 18%); align-items: flex-start; justify-content: center; padding-top: 24px; font-size: 18px; font-weight: bold; transition: background 0.1s; }
       .dc-is-pc.dc-fullscreen #dc-send { bottom: 15px !important; }
       
-      /* ⏳ 考えてる感を出すうっすらフェードアニメーション */
       .dc-thinking { opacity: 0.6; font-style: italic; animation: dc-blink 1.4s infinite both; }
       @keyframes dc-blink { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
     `;
@@ -192,12 +191,10 @@
 
     input.addEventListener("input", adjustInputHeight);
 
-    // 送信イベント発火 (Core側へ通知)
     function executeSend() {
       const text = input.value.trim();
       if (!text || input.disabled) return;
       
-      // 送信音（send）をトリガー
       playSound('send');
 
       document.dispatchEvent(new CustomEvent('dc-request-send', { 
@@ -256,7 +253,6 @@
       log(e.detail.sender, e.detail.text);
     });
 
-    // 音声再生イベントのキャッチ
     document.addEventListener("dc-play-sound", (e) => {
       console.log("🎵 音声イベント受信:", e.detail);
       playSound(e.detail?.type);
