@@ -8,19 +8,28 @@ window.DoubleChatCore = {
 
     console.log("Core init OK");
 
-    document.addEventListener("dc-request-send", (e) => {
-      const { text, mode } = e.detail;
+    document.addEventListener("DoubleChat:Send", (e) => {
+      console.log("🔥受信 raw:", e.detail);
 
-      console.log("🔥受信:", text, mode);
+      let text, mode;
 
-      // 即返す（遅延なし）
+      // 安全に分岐
+      if (typeof e.detail === "string") {
+        text = e.detail;
+        mode = "normal";
+      } else {
+        text = e.detail.text;
+        mode = e.detail.mode;
+      }
+
+      console.log("🔥解析後:", text, mode);
+
       document.dispatchEvent(new CustomEvent("dc-append-log", {
         detail: {
           sender: "gpt",
-          text: "テスト返答：" + text + " [" + mode + "]"
+          text: "返答：" + text + " [" + mode + "]"
         }
       }));
-
     });
   }
 
