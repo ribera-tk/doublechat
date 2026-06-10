@@ -3,7 +3,7 @@
 
   if (window.DoubleChatUI) return;
 
-  const DC_VERSION = "UI-3.2 (Event-Driven)";
+  const DC_VERSION = "UI-3.3";
   const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
   let isFull = false;
