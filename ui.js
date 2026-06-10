@@ -146,7 +146,8 @@
       if (!text || input.disabled) return;
       
       // カスタムイベントを発火してCoreに処理を委譲
-      document.dispatchEvent(new CustomEvent('dc-request-send', { detail: text }));
+      document.dispatchEvent(new CustomEvent('dc-request-send', { 
+  detail: { text: text }
       
       input.value = "";
       adjustInputHeight();
