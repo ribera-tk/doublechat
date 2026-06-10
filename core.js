@@ -1,36 +1,31 @@
 window.DoubleChatCore = {
 
   _initialized: false,
+  _listenerAttached: false,
 
   init() {
-    if (this._initialized) return;
-    this._initialized = true;
-
     console.log("Core init OK");
 
-    document.addEventListener("DoubleChat:Send", (e) => {
-      console.log("🔥受信 raw:", e.detail);
+    // initは何回でもOKにする
+    if (!this._listenerAttached) {
+      this._listenerAttached = true;
 
-      let text, mode;
+      console.log("🔥リスナー登録");
 
-      // 安全に分岐
-      if (typeof e.detail === "string") {
-        text = e.detail;
-        mode = "normal";
-      } else {
-        text = e.detail.text;
-        mode = e.detail.mode;
-      }
+      document.addEventListener("DoubleChat:Send", (e) => {
+        console.log("🔥受信:", e.detail);
 
-      console.log("🔥解析後:", text, mode);
+        let text = typeof e.detail === "string"
+          ? e.detail
+          : e.detail.text;
 
-      document.dispatchEvent(new CustomEvent("dc-append-log", {
-        detail: {
-          sender: "gpt",
-          text: "返答：" + text + " [" + mode + "]"
-        }
-      }));
-    });
+        document.dispatchEvent(new CustomEvent("dc-append-log", {
+          detail: {
+            sender: "gpt",
+            text: "返答：" + text
+          }
+        }));
+      });
+    }
   }
-
 };
