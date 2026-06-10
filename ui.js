@@ -3,12 +3,17 @@
 
   if (window.DoubleChatUI) return;
 
-  const DC_VERSION = "UI-3.3";
+  const DC_VERSION = "UI-3.4 (Neko & Booster)";
   const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
 
   let isFull = false;
   let currentMode = "normal";
   let lastPos = { left: "", top: "" };
+  
+  // ボリュームブースター用変数
+  let audioCtx = null;
+  let gainNode = null;
+  let audioSource = null;
 
   const MODES = {
     normal: "通常",
@@ -36,6 +41,97 @@
     }
   };
 
+  // 音声を再生する関数（初期の電子音 or リアル猫の鳴き声シミュレート）
+  function playSound(type) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // ランダムで「初期のポン音」か「リアル猫」を分岐
+      const isCat = Math.random() < 0.5;
+
+      if (!isCat) {
+        // --- 初期の電子音（ポン） ---
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        // ボリュームブースターのGainがあればそちらに、なければdestinationに接続
+        if (gainNode) gain.connect(gainNode); else gain.connect(audioCtx.destination);
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+      } else {
+        // --- リアル猫の鳴き声（Web Audioシンセサイズ） ---
+        const now = audioCtx.currentTime;
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc1.connect(gain);
+        osc2.connect(gain);
+        if (gainNode) gain.connect(gainNode); else gain.connect(audioCtx.destination);
+
+        // ランダムで鳴き声のパターン（ピッチ）を変える
+        const catPattern = Math.floor(Math.random() * 4); 
+        let baseFreq = 600; // 通常の「ニャー」
+        let duration = 0.4;
+
+        if (catPattern === 1) { baseFreq = 750; duration = 0.25; } // 高めの「ミャッ」
+        else if (catPattern === 2) { baseFreq = 450; duration = 0.5; } // 低めの「ナァー」
+        else if (catPattern === 3) { baseFreq = 650; duration = 0.35; } // 途中で震える
+
+        osc1.type = "triangle";
+        osc2.type = "sawtooth"; // リアルな鳴き声の「かすれ感」を出すためにノコギリ波をブレンド
+
+        osc1.frequency.setValueAtTime(baseFreq, now);
+        osc1.frequency.linearRampToValueAtTime(baseFreq * 1.2, now + duration * 0.2);
+        osc1.frequency.exponentialRampToValueAtTime(baseFreq * 0.8, now + duration);
+
+        osc2.frequency.setValueAtTime(baseFreq * 1.01, now);
+        osc2.frequency.exponentialRampToValueAtTime(baseFreq * 0.79, now + duration);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.08, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + duration);
+        osc2.stop(now + duration);
+      }
+    } catch (e) {
+      console.warn("Sound play failed:", e);
+    }
+  }
+
+  // ボリュームブースターの初期化
+  function initVolumeBooster() {
+    try {
+      const mediaElements = document.querySelectorAll("audio, video");
+      if (mediaElements.length === 0) return;
+
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!gainNode) {
+        gainNode = audioCtx.createGain();
+        gainNode.connect(audioCtx.destination);
+      }
+
+      mediaElements.forEach(element => {
+        // 既に接続済みでなければ接続
+        try {
+          const source = audioCtx.createMediaElementSource(element);
+          source.connect(gainNode);
+        } catch(e) {}
+      });
+    } catch(e) {
+      console.warn("Volume Booster init failed:", e);
+    }
+  }
+
   function createUI() {
     if (document.getElementById("dc-root")) return;
 
@@ -58,6 +154,11 @@
         <div id="dc-log"></div>
         <textarea id="dc-input" placeholder="入力..." rows="1"></textarea>
         <button id="dc-send">➤</button>
+        <div id="dc-booster-panel">
+          <label for="dc-booster-range">🔊 Booster:</label>
+          <input type="range" id="dc-booster-range" min="1" max="3" step="0.1" value="1">
+          <span id="dc-booster-val">100%</span>
+        </div>
       </div>
     `;
 
@@ -67,6 +168,12 @@
     style.innerHTML = `
       #dc-root, #dc-root * { box-sizing: border-box !important; }
       #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial, sans-serif; color: #111; transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+      
+      /* 猫耳デザイン：左右の間隔を2mm(約8px)狭めて中央寄りに補正 */
+      #dc-root::before, #dc-root::after { content: ""; position: absolute; top: -10px; width: 0; height: 0; border-bottom: 12px solid rgba(255,255,255,0.95); z-index: 9998; }
+      #dc-root::before { left: 32px; border-left: 8px solid transparent; border-right: 8px solid transparent; }
+      #dc-root::after { right: 32px; border-left: 8px solid transparent; border-right: 8px solid transparent; }
+      
       #dc-header { height: 40px; padding: 0 10px; display: flex; justify-content: space-between; align-items: center; cursor: move; font-weight: bold; border-bottom: 1px solid #ccc; user-select: none; }
       #dc-title-area { display: flex; align-items: center; gap: 8px; font-size: 14px; }
       #dc-controls { display: flex; gap: 12px; align-items: center; }
@@ -88,34 +195,36 @@
       .you .dc-msg-row { flex-direction: row-reverse; }
       .dc-msg-time { font-size: 9px; color: #999; user-select: none; white-space: nowrap; margin-bottom: 2px; }
       
-      .dc-msg-bubble { position: relative; padding: 8px 14px; border-radius: 16px !important; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.1); z-index: 1; margin-top: 8px; }
-      .dc-msg-bubble::before { content: ""; position: absolute; top: -7px; width: 32px; height: 8px; z-index: -1; clip-path: polygon(0% 100%, 20% 0%, 40% 100%, 60% 100%, 80% 0%, 100% 100%); }
-      .dc-msg-bubble::after { content: ""; position: absolute; bottom: 2px; width: 8px; height: 12px; z-index: -1; }
+      /* 短文でも崩れない猫耳・猫尻尾（下はね）の吹き出し */
+      .dc-msg-bubble { position: relative; padding: 8px 14px; border-radius: 12px !important; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.1); z-index: 1; margin-top: 4px; min-width: 40px; }
+      
+      /* 吹き出しの猫尻尾（下はね形状へクリップパスを変更） */
+      .dc-msg-bubble::after { content: ""; position: absolute; bottom: -2px; width: 10px; height: 10px; z-index: -1; }
+      .dc-msg-wrapper.you .dc-msg-bubble::after { right: 6px; background: #a9e3a3; clip-path: polygon(0 0, 100% 0, 100% 100%, 30% 60%); }
+      .dc-msg-wrapper.gpt .dc-msg-bubble::after { left: 6px; background: #10a37f; clip-path: polygon(0 0, 100% 0, 70% 60%, 0 100%); }
+      .dc-msg-wrapper.gemini .dc-msg-bubble::after { left: 6px; background: #1a73e8; clip-path: polygon(0 0, 100% 0, 70% 60%, 0 100%); }
       
       .dc-msg-you { background: #a9e3a3; color: #111; }
-      .dc-msg-wrapper.you .dc-msg-bubble::before { left: 12px; background: #a9e3a3; }
-      .dc-msg-wrapper.you .dc-msg-bubble::after { right: -4px; background: #a9e3a3; border-radius: 0 5px 5px 0; transform: rotate(35deg); }
-      
       .dc-msg-gpt { background: #10a37f; color: #fff; }
-      .dc-msg-wrapper.gpt .dc-msg-bubble::before { right: 12px; background: #10a37f; }
-      .dc-msg-wrapper.gpt .dc-msg-bubble::after { left: -4px; background: #10a37f; border-radius: 5px 0 0 5px; transform: rotate(-35deg); }
-      
       .dc-msg-gemini { background: #1a73e8; color: #fff; }
-      .dc-msg-wrapper.gemini .dc-msg-bubble::before { right: 12px; background: #1a73e8; }
-      .dc-msg-wrapper.gemini .dc-msg-bubble::after { left: -4px; background: #1a73e8; border-radius: 5px 0 0 5px; transform: rotate(-35deg); }
       
       .dc-is-pc #dc-input { width: 100% !important; height: 38px; min-height: 38px; max-height: 150px; padding: 9px 50px 9px 10px !important; resize: none; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; overflow-y: auto; line-height: 1.4; }
-      .dc-is-pc #dc-send { position: absolute !important; right: 16px; bottom: 15px; width: 36px; height: 28px; background: #0a84ff; color: white; border: none; border-radius: 4px; cursor: pointer; z-index: 99; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.1s; }
+      .dc-is-pc #dc-send { position: absolute !important; right: 16px; bottom: 38px; width: 36px; height: 28px; background: #0a84ff; color: white; border: none; border-radius: 4px; cursor: pointer; z-index: 99; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: background 0.1s; }
       .dc-is-mobile #dc-input { width: 100% !important; height: 38px; min-height: 38px; max-height: 120px; padding: 9px 10px !important; resize: none; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; overflow-y: auto; line-height: 1.4; }
       .dc-is-mobile #dc-send { display: none !important; }
       
+      /* ブースターUIのスタイル */
+      #dc-booster-panel { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 4px; color: #55px; border-top: 1px solid #eee; padding-top: 4px; }
+      #dc-booster-range { flex-grow: 1; height: 12px; cursor: pointer; }
+      #dc-booster-val { font-weight: bold; width: 35px; text-align: right; }
+
       .dc-fullscreen { width: 100vw !important; height: 100dvh !important; top: 0 !important; left: 0 !important; border-radius: 0 !important; overflow: hidden !important; }
       .dc-fullscreen #dc-body { height: calc(100dvh - 45px) !important; }
       .dc-fullscreen #dc-log { flex-grow: 1; height: auto !important; font-size: 14px; }
       .dc-fullscreen #dc-input { max-height: 260px !important; font-size: 14px; }
       .dc-is-mobile.dc-fullscreen #dc-input { padding-right: 55px !important; }
-      .dc-is-mobile.dc-fullscreen #dc-send { display: flex !important; position: absolute !important; right: 15px; bottom: calc(env(safe-area-inset-bottom, 0px) + 2px) !important; width: 48px; height: 85px; background: #0a84ff; color: white; border: none; cursor: pointer; z-index: 99; clip-path: polygon(50% 0%, 100% 18%, 100% 100%, 0% 100%, 0% 18%); align-items: flex-start; justify-content: center; padding-top: 24px; font-size: 18px; font-weight: bold; transition: background 0.1s; }
-      .dc-is-pc.dc-fullscreen #dc-send { bottom: 15px !important; }
+      .dc-is-mobile.dc-fullscreen #dc-send { display: flex !important; position: absolute !important; right: 15px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px) !important; width: 48px; height: 85px; background: #0a84ff; color: white; border: none; cursor: pointer; z-index: 99; clip-path: polygon(50% 0%, 100% 18%, 100% 100%, 0% 100%, 0% 18%); align-items: flex-start; justify-content: center; padding-top: 24px; font-size: 18px; font-weight: bold; transition: background 0.1s; }
+      .dc-is-pc.dc-fullscreen #dc-send { bottom: 38px !important; }
       
       .dc-thinking { opacity: 0.6; font-style: italic; animation: dc-blink 1.4s infinite both; }
       @keyframes dc-blink { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
@@ -132,6 +241,10 @@
     const fullBtn = document.getElementById("dc-full");
     const input = document.getElementById("dc-input");
     const sendBtn = document.getElementById("dc-send");
+    
+    // ブースター関連UI要素
+    const boosterRange = document.getElementById("dc-booster-range");
+    const boosterVal = document.getElementById("dc-booster-val");
 
     function adjustInputHeight() {
       input.style.height = "auto";
@@ -145,10 +258,9 @@
       const text = input.value.trim();
       if (!text || input.disabled) return;
       
-      // カスタムイベントを発火してCoreに処理を委譲
       document.dispatchEvent(new CustomEvent('dc-request-send', { 
         detail: { text: text }
-      })); // 🌟 修正: 閉じ括弧を追加
+      }));
       
       input.value = "";
       adjustInputHeight();
@@ -164,6 +276,22 @@
         }
       }
     });
+
+    // ボリュームブースタースライダーイベント
+    boosterRange.addEventListener("input", (e) => {
+      const vol = parseFloat(e.target.value);
+      boosterVal.textContent = Math.round(vol * 100) + "%";
+      
+      if (!audioCtx) initVolumeBooster();
+      if (gainNode) {
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+      }
+    });
+    
+    // ページ上の要素変更時に随時音声エレメントをブースターにフックする
+    document.addEventListener("play", () => {
+      if (!audioCtx) initVolumeBooster();
+    }, true);
 
     document.getElementById("dc-mode").onclick = (e) => {
       e.stopPropagation();
@@ -198,11 +326,14 @@
 
     document.addEventListener("dc-append-log", (e) => {
       console.log("📥 UI受信:", e.detail);
-
       if (!e.detail?.sender || !e.detail?.text) return;
-
-      // 🌟 修正: 単なるdivではなく、既存のリッチな吹き出し関数 log() を通す
       log(e.detail.sender, e.detail.text);
+    });
+
+    // 音声再生イベントのキャッチ
+    document.addEventListener("dc-play-sound", (e) => {
+      console.log("🎵 音声イベント受信:", e.detail);
+      playSound(e.detail?.type);
     });
   }
 
@@ -259,7 +390,7 @@
     let dragging = false, offsetX = 0, offsetY = 0;
     
     const startDrag = (clientX, clientY, target) => {
-      if (isFull || target.closest("#dc-controls") || target.closest("#dc-mode")) return false; 
+      if (isFull || target.closest("#dc-controls") || target.closest("#dc-mode") || target.closest("#dc-booster-panel")) return false; 
       dragging = true; box.style.transition = "none";
       const currentLeft = box.offsetLeft, currentTop = box.offsetTop;
       box.style.left = currentLeft + "px"; box.style.top = currentTop + "px"; box.style.right = "auto"; 
