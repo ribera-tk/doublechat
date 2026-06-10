@@ -147,7 +147,8 @@
       
       // カスタムイベントを発火してCoreに処理を委譲
       document.dispatchEvent(new CustomEvent('dc-request-send', { 
-  detail: { text: text }
+        detail: { text: text }
+      })); // 🌟 修正: 閉じ括弧を追加
       
       input.value = "";
       adjustInputHeight();
@@ -191,25 +192,20 @@
       adjustInputHeight();
     };
   }
-function setupCoreListeners() {
-  console.log("👂 UIリスナー登録");
 
-  document.addEventListener("dc-append-log", (e) => {
-    console.log("📥 UI受信:", e.detail);
+  function setupCoreListeners() {
+    console.log("👂 UIリスナー登録");
 
-    const logArea = document.getElementById("dc-log");
+    document.addEventListener("dc-append-log", (e) => {
+      console.log("📥 UI受信:", e.detail);
 
-    if (!logArea) {
-      console.warn("❌ logAreaが無い");
-      return;
-    }
+      if (!e.detail?.sender || !e.detail?.text) return;
 
-    const div = document.createElement("div");
-    div.textContent = e.detail.sender + "：" + e.detail.text;
+      // 🌟 修正: 単なるdivではなく、既存のリッチな吹き出し関数 log() を通す
+      log(e.detail.sender, e.detail.text);
+    });
+  }
 
-    logArea.appendChild(div);
-  });
-}
   function log(sender, text) {
     const logArea = document.getElementById("dc-log");
     if (!logArea) return null;
@@ -285,5 +281,6 @@ function setupCoreListeners() {
     document.addEventListener("touchmove", (e) => { if (dragging) { const t = e.touches[0]; moveDrag(t.clientX, t.clientY); if (e.cancelable) e.preventDefault(); } }, { passive: false }); 
     document.addEventListener("touchend", endDrag);
   }
-setupCoreListeners();
+
+  setupCoreListeners();
 })();
