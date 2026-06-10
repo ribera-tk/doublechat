@@ -8,15 +8,20 @@ window.DoubleChatCore = {
 
     console.log("Core init OK");
 
-   document.addEventListener("DoubleChat:Send", (e) => {
-  const text = e.detail;
+    document.addEventListener("dc-request-send", (e) => {
+      const { text, mode } = e.detail;
 
-  console.log("🔥受信:", text);
+      console.log("🔥受信:", text, mode);
 
-  document.dispatchEvent(new CustomEvent("dc-append-log", {
-    detail: {
-      sender: "gpt",
-      text: "返答：" + text
-    }
-  }));
-});
+      // 即返す（遅延なし）
+      document.dispatchEvent(new CustomEvent("dc-append-log", {
+        detail: {
+          sender: "gpt",
+          text: "テスト返答：" + text + " [" + mode + "]"
+        }
+      }));
+
+    });
+  }
+
+};
