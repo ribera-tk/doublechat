@@ -1,48 +1,46 @@
-window.DoubleChatCore = {
+(function () {
+  'use strict';
 
-  _initialized: false,
-  _listenerAttached: false,
+  window.DoubleChatCore = {
 
-  init() {
-    console.log("Core init OK");
+    _initialized: false,
+    _listenerAttached: false,
 
-    // initは何回でもOKにする
-    if (!this._listenerAttached) {
-      this._listenerAttached = true;
+    init() {
+      console.log("Core init OK");
 
-      console.log("🔥リスナー登録");
+      if (!this._listenerAttached) {
+        this._listenerAttached = true;
 
-      document.addEventListener("dc-request-send", (e) => {
-        console.log("🔥受信:", e.detail);
+        console.log("🔥リスナー登録");
 
-        const text = e.detail.text;
+        document.addEventListener("dc-request-send", (e) => {
+          console.log("🔥受信:", e.detail);
 
-        // UIロック（任意）
-        document.dispatchEvent(new CustomEvent("dc-lock-ui"));
+          const text = e.detail.text;
 
-        // 自分の発言を表示
-        document.dispatchEvent(new CustomEvent("dc-append-log", {
-          detail: { sender: "you", text: text }
-        }));
+          document.dispatchEvent(new CustomEvent("dc-lock-ui"));
 
-        // ダミー返信（テスト用）
-        setTimeout(() => {
           document.dispatchEvent(new CustomEvent("dc-append-log", {
-            detail: { sender: "gpt", text: "受け取った: " + text }
+            detail: { sender: "you", text: text }
           }));
 
-          // 音（必要なら）
-          document.dispatchEvent(new CustomEvent("dc-play-sound", {
-            detail: { type: "reply_gpt" }
-          }));
+          setTimeout(() => {
+            document.dispatchEvent(new CustomEvent("dc-append-log", {
+              detail: { sender: "gpt", text: "受け取った: " + text }
+            }));
 
-          // UIアンロック
-          document.dispatchEvent(new CustomEvent("dc-unlock-ui"));
+            document.dispatchEvent(new CustomEvent("dc-play-sound", {
+              detail: { type: "reply_gpt" }
+            }));
 
-        }, 500);
-      });
+            document.dispatchEvent(new CustomEvent("dc-unlock-ui"));
+
+          }, 500);
+        });
+      }
     }
-    ｝
+
   };
 
 })();
