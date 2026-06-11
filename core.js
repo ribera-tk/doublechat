@@ -1,4 +1,33 @@
-    if (typeof ai1 === 'string' && ai1.trim()) replies.push({ sender: 'gpt', text: ai1.trim() });
+(function () {
+  'use strict';
+  
+  // --- ここが抜けていた設定部分 ---
+  const CORE_VERSION = '2.1';
+  const EVENT_SEND_LEGACY = 'dc-send-legacy';
+  const EVENT_SEND_SPEC = 'dc-send-spec';
+  const MODES = { normal: 'Normal', debug: 'Debug' };
+
+  function getConfig() {
+    return {
+      // 監督、ここに自分のGASのURLを貼り付けてくれ！
+      gasEndpoint: 'https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec　',
+      timeoutMs: 30000
+    };
+  }
+
+  function setupTokenCounterBridge() {
+    document.addEventListener('dc-update-token', (e) => {
+      window.DoubleChatUI?.updateTokenCounter(e.detail);
+    });
+  }
+
+  function applyEarPositionFallback(sender, bubble, text) {
+    window.DoubleChatUI?.applyEarPosition(sender, bubble, text);
+  }
+  
+  // (ここから下に、監督がさっき送ってくれたリクエスト処理などが続く)
+  // ...
+if (typeof ai1 === 'string' && ai1.trim()) replies.push({ sender: 'gpt', text: ai1.trim() });
     if (typeof ai2 === 'string' && ai2.trim()) replies.push({ sender: 'gemini', text: ai2.trim() });
 
     if (!replies.length && Array.isArray(data.choices) && data.choices[0]) {
