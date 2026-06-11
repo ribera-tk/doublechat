@@ -1,14 +1,3 @@
-// ==UserScript==
-// @name         DoubleChat UI
-// @namespace    doublechat
-// @version      3.7
-// @description  Injects the DoubleChat UI into the current page.
-// @match        *://*/*
-// @grant        GM_xmlhttpRequest
-// @connect      script.google.com
-// @connect      script.googleusercontent.com
-// ==/UserScript==
-
 (function () {
   'use strict';
 
@@ -97,3 +86,15 @@
       window.setTimeout(() => playTone(profile.sender, index), index * profile.step);
     });
   }
+
+  function playOutputSound(sender, text) {
+    const profile = getSoundProfile('', sender);
+    const count = Math.min(String(text || '').length, 36);
+
+    for (let i = 0; i < count; i++) {
+      window.setTimeout(() => playTone(profile.sender, i), i * profile.step);
+    }
+  }
+
+  function getEarRatio(length) {
+    if (length <= 2) return 0;
