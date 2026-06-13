@@ -45,7 +45,40 @@ if (typeof ai1 === 'string' && ai1.trim()) replies.push({ sender: 'gpt', text: a
     if (!replies.length) replies.push({ sender: 'gpt', text: JSON.stringify(data) });
     return replies;
   }
+function normalizeAIReplies(raw) {
 
+  let data;
+
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return [{ sender: 'gpt', text: raw }];
+  }
+
+  const replies = [];
+
+  const ai1 = data.ai1;
+  const ai2 = data.ai2;
+
+  if (typeof ai1 === 'string' && ai1.trim()) replies.push({ sender: 'gpt', text: ai1.trim() });
+  if (typeof ai2 === 'string' && ai2.trim()) replies.push({ sender: 'gemini', text: ai2.trim() });
+
+  if (!replies.length && Array.isArray(data.choices) && data.choices[0]) {
+    const choice = data.choices[0];
+    const text = choice.message?.content || choice.text;
+    if (text) replies.push({ sender: 'gpt', text: String(text).trim() });
+  }
+
+  if (!replies.length && Array.isArray(data.candidates) && data.candidates[0]) {
+    const candidate = data.candidates[0];
+    const text = candidate.content?.parts?.[0]?.text || candidate.content || candidate.text;
+    if (text) replies.push({ sender: 'gemini', text: String(text).trim() });
+  }
+
+  if (!replies.length) replies.push({ sender: 'gpt', text: JSON.stringify(data) });
+
+  return replies;
+}
   async function requestWithGM(url, payload, config) {
     return new Promise((resolve, reject) => {
       const gmRequest = window.GM_xmlhttpRequest || window.GM?.xmlHttpRequest;
