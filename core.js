@@ -10,7 +10,7 @@
   function getConfig() {
     return {
       // 監督、ここに自分のGASのURLを貼り付けてくれ！
-      gasEndpoint: 'https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec　',
+      gasEndpoint: 'https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec',
       timeoutMs: 30000
     };
   }
