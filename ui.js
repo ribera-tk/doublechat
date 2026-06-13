@@ -11,26 +11,28 @@
     return { sender: 'gpt', wave: 'sine', notes: [880, 1174.66], gain: 0.06, step: 42, duration: 0.05 };
   }
 
-  function playTone(sender, index) {
-    try {
-      const profile = getSoundProfile('', sender);
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const now = ctx.currentTime;
+ function playTone(sender, index) {
+  try {
+    const profile = getSoundProfile('', sender);
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
 
-      osc.type = profile.wave;
-      osc.frequency.setValueAtTime(profile.notes[index % profile.notes.length], now);
-      gain.gain.setValueAtTime(profile.gain, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + profile.duration);
+    osc.type = profile.wave;
+    osc.frequency.setValueAtTime(profile.notes[index], now);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + profile.duration);
-    } catch (e) {}
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    gain.gain.setValueAtTime(profile.gain, now);
+    osc.start(now);
+    osc.stop(now + profile.duration);
+
+  } catch (e) {
+    console.error(e);
   }
-
+}
   function playSound(type, sender) {
     const profile = getSoundProfile(type, sender);
     profile.notes.forEach((_, index) => {
