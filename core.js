@@ -45,8 +45,35 @@ if (typeof ai1 === 'string' && ai1.trim()) replies.push({ sender: 'gpt', text: a
     if (!replies.length) replies.push({ sender: 'gpt', text: JSON.stringify(data) });
     return replies;
   }
-function normalizeAIReplies(raw) {
 
+  async function requestWithGM(url, payload, config) {
+    return new Promise((resolve, reject) => {
+      const gmRequest = window.GM_xmlhttpRequest || window.GM?.xmlHttpRequest;
+
+      if (!gmRequest) {
+        reject(new Error('GM_xmlhttpRequest is not available'));
+        return;
+      }
+
+      gmRequest({
+        method: 'POST',
+        url,
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        data: JSON.stringify(payload),
+        timeout: config.timeoutMs,
+        onload: (res) => {
+          if (res.status < 200 || res.status >= 300) {
+            reject(new Error('GAS HTTP ' + res.status));
+            return;
+          }
+          resolve(normalizeAIReplies(res.responseText));
+        },
+        onerror: () => reject(new Error('GAS network error')),
+        ontimeout: () => reject(new Error('GAS request timeout'))
+      });
+    });
+  }
+function normalizeAIReplies(raw) {
   let data;
 
   try {
@@ -79,34 +106,6 @@ function normalizeAIReplies(raw) {
 
   return replies;
 }
-  async function requestWithGM(url, payload, config) {
-    return new Promise((resolve, reject) => {
-      const gmRequest = window.GM_xmlhttpRequest || window.GM?.xmlHttpRequest;
-
-      if (!gmRequest) {
-        reject(new Error('GM_xmlhttpRequest is not available'));
-        return;
-      }
-
-      gmRequest({
-        method: 'POST',
-        url,
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        data: JSON.stringify(payload),
-        timeout: config.timeoutMs,
-        onload: (res) => {
-          if (res.status < 200 || res.status >= 300) {
-            reject(new Error('GAS HTTP ' + res.status));
-            return;
-          }
-          resolve(normalizeAIReplies(res.responseText));
-        },
-        onerror: () => reject(new Error('GAS network error')),
-        ontimeout: () => reject(new Error('GAS request timeout'))
-      });
-    });
-  }
-
   async function requestWithFetch(url, payload, config) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), config.timeoutMs);
