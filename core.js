@@ -1,4 +1,5 @@
-(function () {
+;
+function () {
   'use strict';
   
   // --- ここが抜けていた設定部分 ---
