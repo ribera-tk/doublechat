@@ -336,4 +336,4 @@
   }
 
   setupCoreListeners();
-})();
+})();;
