@@ -470,4 +470,5 @@
   }
 
   setupCoreListeners();
+  window.DoubleChatCore?.init();
 })();
