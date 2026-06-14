@@ -139,8 +139,8 @@ function normalizeAIReplies(raw) {
 
     appendLog('you', text);
     playSound('send', 'you');
-    updateTokenCounter();
-    setUILock(true);
+  window.DoubleChatUI?.updateTokenCounter();
+　setUILock(true);
 
     try {
       const replies = await requestAI(text);
