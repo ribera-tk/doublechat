@@ -197,8 +197,8 @@ window.DoubleChatUI.init(); // ←ここ！！
       
       playSound('send');
 
-      document.dispatchEvent(new CustomEvent('dc-request-send', { 
-        detail: { text: text }
+     document.dispatchEvent(new CustomEvent('dc-send-spec', {
+  detail: { text: text }
       }));
       
       input.value = "";
@@ -336,4 +336,5 @@ window.DoubleChatUI.init(); // ←ここ！！
   }
 
   setupCoreListeners();
+  window.DoubleChatCore?.init();
 })();;
