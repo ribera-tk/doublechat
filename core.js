@@ -173,8 +173,8 @@ function normalizeAIReplies(raw) {
     },
 
     sendToAI: requestAI,
-    updateTokenCounter,
-    applyEarPositionFallback,
+   updateTokenCounter: () => window.DoubleChatUI?.updateTokenCounter(),
+　　 applyEarPositionFallback,
     getConfig
   };
 
