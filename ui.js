@@ -34,7 +34,7 @@
       }
     }
   };
-
+window.DoubleChatUI.init(); // ←ここ！！
   // 🔊 新・3人用クリーン電子音（にゃ〜ん排除、初期ポン音の系譜）
   function playSound(type) {
     try {
