@@ -285,5 +285,5 @@
     applyEarPositionFallback,
     getConfig
   };
-
+window.DoubleChatCore.init();
 })();
