@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         DoubleChat v14.3 (UI Refined)
+// @name         DoubleChat v14.3.1 (UI Refined / Fix)
 // @match        https://chatgpt.com/*
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
@@ -19,23 +19,33 @@
 
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
 
-  // 🎵 サウンドシステム (電子音)
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // 🎵 サウンドシステム (遅延初期化でクラッシュ防止)
+  let audioCtx = null;
   function playSound(role) {
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    
-    if (role === 'user') { osc.type = 'sine'; osc.frequency.value = 1567; }
-    else if (role === 'chatgpt') { osc.type = 'square'; osc.frequency.value = 850; }
-    else { osc.type = 'triangle'; osc.frequency.value = 1050; }
-    
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.1);
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      if (role === 'user') { osc.type = 'sine'; osc.frequency.value = 1567; }
+      else if (role === 'chatgpt') { osc.type = 'square'; osc.frequency.value = 850; }
+      else { osc.type = 'triangle'; osc.frequency.value = 1050; }
+      
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    } catch (e) {
+      console.log("Audio play failed:", e);
+    }
   }
 
   // ⏱ スロットリング関数 (ドラッグもっさり解消用)
@@ -95,7 +105,7 @@
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v14.3
+        DoubleChat v14.3.1
         <div id="dc-controls">
           <span id="dc-min">-</span>
         </div>
@@ -109,8 +119,9 @@
     `;
     document.body.appendChild(root);
 
+    // style.innerHTML ではなく style.textContent を使用（CSP対策）
     const style = document.createElement("style");
-    style.innerHTML = `
+    style.textContent = `
       #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; transition: width 0.2s, height 0.2s; }
       #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; user-select: none; border-bottom: 1px solid #ccc; }
       #dc-controls { display: flex; gap: 15px; }
@@ -124,11 +135,11 @@
       .dc-bubble {
         position: relative; margin-bottom: 8px; padding: 8px 12px; border-radius: 14px;
         display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-        background: #f9f9f9; border: 1px solid #eee; word-break: break-all;
+        background: #f9f9f9; border: 1px solid #eee; word-break: break-all; color: #333;
       }
-      .dc-bubble-user { color: #0a84ff; border-color: #0a84ff; border-bottom-right-radius: 2px; }
-      .dc-bubble-ai { color: #2ecc71; border-color: #2ecc71; border-bottom-left-radius: 2px; }
-      .dc-bubble-gemini { color: #9b59b6; border-color: #9b59b6; border-bottom-left-radius: 2px; }
+      .dc-bubble-user { border-left: 4px solid #0a84ff; border-bottom-right-radius: 2px; }
+      .dc-bubble-ai { border-left: 4px solid #2ecc71; border-bottom-left-radius: 2px; }
+      .dc-bubble-gemini { border-left: 4px solid #9b59b6; border-bottom-left-radius: 2px; }
 
       /* マタギボタン（五角形） */
       #dc-matagi-btn {
@@ -138,8 +149,8 @@
       }
       #dc-matagi-btn:active { transform: scale(0.9); }
 
-      /* フルスクリーン */
-      .dc-fullscreen { width: 100vw !important; height: 100dvh !important; top: 0 !important; left: 0 !important; right: 0 !important; border-radius: 0 !important; }
+      /* フルスクリーン (dvhをvhに変更し互換性確保) */
+      .dc-fullscreen { width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; right: 0 !important; border-radius: 0 !important; }
       .dc-fullscreen #dc-body { height: calc(100% - 40px); }
       .dc-fullscreen #dc-log { flex-grow: 1; height: auto !important; font-size: 14px; }
     `;
@@ -171,7 +182,7 @@
     line.className = "dc-bubble " + roleClass;
     line.textContent = text;
     
-    // 猫耳の仮想オフセット設定（CSS変数やJSで活用可能）
+    // 猫耳の仮想オフセット設定
     const ratio = getEarRatio(text.length);
     line.style.setProperty('--ear-ratio', ratio);
 
@@ -321,7 +332,7 @@
       dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop;
     });
     
-    // 💨 16msのスロットリングでドラッグの「もっさり」を解消
+    // 💨 スロットリングでドラッグ処理を間引き
     const onMouseMove = throttle((e) => {
       if (!dragging) return;
       box.style.left = (e.clientX - offsetX) + "px"; 
@@ -355,7 +366,7 @@
     createUI();
     observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff; padding: 4px;">🟢 DoubleChat v14.3 起動完了</div>';
+    if (log) log.innerHTML = '<div style="color:#0a84ff; padding: 4px; font-weight: bold;">🟢 DoubleChat v14.3.1 起動完了</div>';
   }
 
   setTimeout(bootstrap, 1500);
