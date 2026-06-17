@@ -1,11 +1,14 @@
 // ==UserScript==
-// @name         DoubleChat v14.3.1 (UI Refined / Fix)
+// @name         DoubleChat
 // @match        https://chatgpt.com/*
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 (function () {
   'use strict';
+
+  // 🌟 バージョン一括管理
+  const DC_VERSION = "14.3.0";
 
   let isSending = false;
   let aiSaveTimer = null;
@@ -17,49 +20,27 @@
   let lastHash = "";
   let currentUserQuery = ""; 
 
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
-
-  // 🎵 サウンドシステム (遅延初期化でクラッシュ防止)
-  let audioCtx = null;
-  function playSound(role) {
-    try {
-      if (!audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        audioCtx = new AC();
-      }
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      if (role === 'user') { osc.type = 'sine'; osc.frequency.value = 1567; }
-      else if (role === 'chatgpt') { osc.type = 'square'; osc.frequency.value = 850; }
-      else { osc.type = 'triangle'; osc.frequency.value = 1050; }
-      
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.1);
-    } catch (e) {
-      console.log("Audio play failed:", e);
+  // 🎨 モード管理システム
+  let currentMode = "normal"; // "normal", "present", "debate"
+  const MODES = {
+    normal: {
+      label: "通常",
+      prompt: "上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。"
+    },
+    present: {
+      label: "プレゼン",
+      prompt: "チャッピーの回答から「結論」と「要点」のみを抽出し、前提や解説はすべて省いて、数行でズバッと答えのみを出力せよ。日本語で。提案は抑えめに。"
+    },
+    debate: {
+      label: "討論",
+      prompt: "チャッピーの回答に対し、あえて異なる視点や客観的な反論・改善点を1点提示し、議論を深めるための鋭い問いかけを行え。日本語で。提案は抑えめに。"
     }
-  }
-
-  // ⏱ スロットリング関数 (ドラッグもっさり解消用)
-  const throttle = (func, limit) => {
-    let inThrottle;
-    return function(...args) {
-      if (!inThrottle) {
-        func.apply(this, args);
-        inThrottle = true;
-        setTimeout(() => inThrottle = false, limit);
-      }
-    };
   };
 
+  // 📊 GASウェブアプリURL
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz5KpGu5WMGrpsuHcfNFX5ygcnL0yfsOIBEEETvTZ8cBzZ842GG-HIEvx9XEwCM4j56ew/exec";
+
+  // 🔒 重複ブロック用ハッシュ関数
   function getHash(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -70,6 +51,7 @@
     return hash.toString();
   }
 
+  // ⛓️ キューシステム
   async function enqueue(task) {
     queue.push(task);
     if (!isProcessing) {
@@ -90,23 +72,17 @@
     isProcessing = false;
   }
 
-  // 📐 猫耳位置の計算
-  function getEarRatio(len) {
-    if (len <= 2) return 0;
-    if (len === 3) return 0.16;
-    if (len <= 6) return 0.26;
-    if (len <= 12) return 0.36;
-    return 0.40;
-  }
-
+  // 🛠️ UI作成
   function createUI() {
     if (document.getElementById("dc-root")) return;
     const root = document.createElement("div");
     root.id = "dc-root";
     root.innerHTML = `
       <div id="dc-header">
-        DoubleChat v14.3.1
+        DoubleChat v${DC_VERSION}
         <div id="dc-controls">
+          <span id="dc-mode">通常</span>
+          <span id="dc-max">□</span>
           <span id="dc-min">-</span>
         </div>
       </div>
@@ -115,88 +91,117 @@
         <textarea id="dc-input" placeholder="入力..."></textarea>
         <button id="dc-send">送信</button>
       </div>
-      <div id="dc-matagi-btn" title="フルスクリーン切替"></div>
     `;
     document.body.appendChild(root);
 
-    // style.innerHTML ではなく style.textContent を使用（CSP対策）
     const style = document.createElement("style");
-    style.textContent = `
-      #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; transition: width 0.2s, height 0.2s; }
+    style.innerHTML = `
+      #dc-root { position: fixed; top: 70px; right: 10px; width: 320px; z-index: 9999; background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.2); border-radius: 10px; font-family: Arial; color: #111; transition: all 0.2s ease; }
       #dc-header { padding: 10px; display: flex; justify-content: space-between; cursor: move; font-weight: bold; user-select: none; border-bottom: 1px solid #ccc; }
-      #dc-controls { display: flex; gap: 15px; }
-      #dc-min { cursor: pointer; font-weight: bold; }
+      #dc-controls { display: flex; gap: 15px; align-items: center; }
+      #dc-mode { cursor: pointer; font-size: 11px; background: #0a84ff; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; user-select: none; }
+      #dc-max, #dc-min { cursor: pointer; font-weight: bold; padding: 0 4px; }
       #dc-body { padding: 10px; display: flex; flex-direction: column; }
-      #dc-log { display: flex; flex-direction: column; height: 180px; overflow-y: auto; background: rgba(255,255,255,0.8); border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
+      #dc-log { display: flex; flex-direction: column; height: 120px; overflow-y: auto; background: rgba(255,255,255,0.8); border: 1px solid #ddd; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 12px; }
       #dc-input { width: 100%; height: 60px; margin-bottom: 6px; box-sizing: border-box; resize: vertical; }
       #dc-send { width: 100%; padding: 8px; cursor: pointer; }
-      
-      /* 猫バブル共通 */
-      .dc-bubble {
-        position: relative; margin-bottom: 8px; padding: 8px 12px; border-radius: 14px;
-        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-        background: #f9f9f9; border: 1px solid #eee; word-break: break-all; color: #333;
-      }
-      .dc-bubble-user { border-left: 4px solid #0a84ff; border-bottom-right-radius: 2px; }
-      .dc-bubble-ai { border-left: 4px solid #2ecc71; border-bottom-left-radius: 2px; }
-      .dc-bubble-gemini { border-left: 4px solid #9b59b6; border-bottom-left-radius: 2px; }
-
-      /* マタギボタン（五角形） */
-      #dc-matagi-btn {
-        position: absolute; bottom: -60px; right: 0; width: 45px; height: 45px;
-        clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
-        background: #ff4500; cursor: pointer; transition: transform 0.1s;
-      }
-      #dc-matagi-btn:active { transform: scale(0.9); }
-
-      /* フルスクリーン (dvhをvhに変更し互換性確保) */
-      .dc-fullscreen { width: 100vw !important; height: 100vh !important; top: 0 !important; left: 0 !important; right: 0 !important; border-radius: 0 !important; }
-      .dc-fullscreen #dc-body { height: calc(100% - 40px); }
-      .dc-fullscreen #dc-log { flex-grow: 1; height: auto !important; font-size: 14px; }
+      .dc-maximized { width: 90vw !important; height: 85vh !important; top: 5vh !important; left: 5vw !important; right: auto !important; }
+      .dc-maximized #dc-body { height: calc(100% - 40px); }
+      .dc-maximized #dc-log { flex-grow: 1; height: auto !important; font-size: 14px; }
+      .dc-maximized #dc-input { height: 100px; }
     `;
     document.head.appendChild(style);
 
     document.getElementById("dc-send").onclick = send;
 
     const minBtn = document.getElementById("dc-min");
+    const maxBtn = document.getElementById("dc-max");
+    const modeBtn = document.getElementById("dc-mode");
     const body = document.getElementById("dc-body");
+
+    // 🔄 ⏰ 最小化・再表示のトグル
     const toggleMin = (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (body.style.display === "none") { body.style.display = "flex"; minBtn.textContent = "-"; }
-      else { body.style.display = "none"; minBtn.textContent = "+"; }
+      if (body.style.display === "none") { 
+        root.classList.remove("dc-maximized");
+        body.style.display = "flex"; 
+        minBtn.textContent = "-"; 
+      } else { 
+        root.classList.remove("dc-maximized");
+        body.style.display = "none"; 
+        minBtn.textContent = "+"; 
+      }
     };
-    minBtn.addEventListener("click", toggleMin);
 
-    const matagiBtn = document.getElementById("dc-matagi-btn");
-    matagiBtn.addEventListener("click", () => {
-      root.classList.toggle("dc-fullscreen");
-    });
+    // 🔄 ⏰ 最大化のトグル
+    const toggleMax = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (body.style.display === "none") {
+        body.style.display = "flex";
+        minBtn.textContent = "-";
+        root.classList.add("dc-maximized");
+      } else {
+        root.classList.toggle("dc-maximized");
+      }
+    };
+
+    // 🔄 ⏰ 【新機能】プロンプトモード切替（通常 ➔ プレゼン ➔ 討論）
+    const toggleMode = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (currentMode === "normal") currentMode = "present";
+      else if (currentMode === "present") currentMode = "debate";
+      else currentMode = "normal";
+
+      modeBtn.textContent = MODES[currentMode].label;
+      
+      // 🟢 ログに緑文字で現在のモードを表示
+      const log = document.getElementById("dc-log");
+      if (log) {
+        const line = document.createElement("div");
+        line.textContent = `🟢 [${MODES[currentMode].label}モード] に切り替えました`;
+        line.style.color = "#2ecc71";
+        line.style.fontWeight = "bold";
+        line.style.marginBottom = "4px";
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+    };
+
+    minBtn.addEventListener("touchstart", toggleMin, { passive: false });
+    minBtn.addEventListener("click", toggleMin);
+    maxBtn.addEventListener("touchstart", toggleMax, { passive: false });
+    maxBtn.addEventListener("click", toggleMax);
+    modeBtn.addEventListener("touchstart", toggleMode, { passive: false });
+    modeBtn.addEventListener("click", toggleMode);
 
     enableDrag();
   }
 
-  function appendBubble(text, roleClass) {
+  function appendLog(text) {
     const log = document.getElementById("dc-log");
     if (!log) return;
     const line = document.createElement("div");
-    line.className = "dc-bubble " + roleClass;
     line.textContent = text;
+    line.style.marginBottom = "4px";
+    line.style.borderBottom = "1px dashed #eee";
+    line.style.paddingBottom = "4px";
     
-    // 猫耳の仮想オフセット設定
-    const ratio = getEarRatio(text.length);
-    line.style.setProperty('--ear-ratio', ratio);
-
+    if (text.startsWith("YOU:")) {
+      line.style.color = "#0a84ff";
+      saveLog("YOU", text.replace("YOU: ", ""));
+    }
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
-    return line;
   }
 
   function saveLog(role, content) {
     conversationLog.push({ role, content }); 
     if (!GAS_URL || typeof GM_xmlhttpRequest === "undefined") return;
+
+    const logWithVersion = `[v${DC_VERSION}][${MODES[currentMode].label}] ${content}`;
     GM_xmlhttpRequest({
       method: "GET",
-      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(content) + "&_=" + Date.now(),
+      url: GAS_URL + "?role=" + encodeURIComponent(role) + "&content=" + encodeURIComponent(logWithVersion) + "&_=" + Date.now(),
       onload: function(res) { console.log("Log saved:", res.responseText); }
     });
   }
@@ -204,10 +209,13 @@
   function callGemini(text, gptText, callback) {
     if (typeof GM_xmlhttpRequest === "undefined") { callback("Gemini: 拡張機能エラー"); return; }
     
+    // ⚡ モードに応じて裏のシステムプロンプトを自動選択！
+    const activePrompt = MODES[currentMode].prompt;
+
     const customPrompt = `
 【指示】${text}
 【チャッピーの回答】${gptText || "（まだ回答なし）"}
-上記のチャッピーの回答を踏まえ、補足を簡潔に。日本語で。提案は抑えめに。
+${activePrompt}
 `.trim();
 
     GM_xmlhttpRequest({
@@ -234,9 +242,7 @@
     const text = inputEl.value.trim();
     if (!text) { isSending = false; return; }
 
-    playSound('user');
-    appendBubble("YOU: " + text, "dc-bubble-user");
-    saveLog("YOU", text);
+    appendLog("YOU: " + text);
     currentUserQuery = text; 
     inputEl.value = "";
 
@@ -258,7 +264,26 @@
   }
 
   function observeAI() {
-    const observer = new MutationObserver(() => {
+    const targetEl = document.querySelector("main") || document.body;
+
+    const observer = new MutationObserver((mutations) => {
+      let hasChatGPTUpdate = false;
+      const dcRoot = document.getElementById("dc-root");
+      for (const m of mutations) {
+        if (!dcRoot || !dcRoot.contains(m.target)) {
+          hasChatGPTUpdate = true;
+          break;
+        }
+      }
+      if (!hasChatGPTUpdate) return;
+
+      const isGenerating = document.querySelector("button[data-testid*='stop-button']") || 
+                           document.querySelector("main button[aria-label*='Stop']");
+      if (isGenerating) {
+        clearTimeout(aiSaveTimer); 
+        return; 
+      }
+
       if (aiObserveTimer) return;
       aiObserveTimer = setTimeout(() => {
         aiObserveTimer = null;
@@ -266,7 +291,9 @@
         if (!messages.length) return;
         
         const last = messages[messages.length - 1];
-        const text = last.textContent?.trim();
+        
+        // ⚡ 【監督案】直近の末尾800文字だけをスライスして軽量化！
+        const text = (last.textContent?.trim() || "").slice(-800);
         if (!text || text.length < 10) return;
 
         const log = document.getElementById("dc-log");
@@ -274,32 +301,36 @@
         const isAtBottom = (log.scrollHeight - log.scrollTop - log.clientHeight) < 30;
 
         let lastAiLine = null;
-        const divs = log.getElementsByClassName("dc-bubble-ai");
-        if (divs.length > 0) {
-           lastAiLine = divs[divs.length - 1];
+        const divs = log.getElementsByTagName("div");
+        for (let i = divs.length - 1; i >= 0; i--) {
+          if (divs[i].textContent.startsWith("AI:")) { lastAiLine = divs[i]; break; }
         }
 
         if (lastAiLine && last.getAttribute("data-dc-observing") === "true") {
           lastAiLine.textContent = "AI: " + text;
         } else {
           last.setAttribute("data-dc-observing", "true");
-          appendBubble("AI: " + text, "dc-bubble-ai");
+          const line = document.createElement("div");
+          line.textContent = "AI: " + text;
+          line.style.color = "#2ecc71";
+          line.style.marginBottom = "4px";
+          line.style.borderBottom = "1px dashed #eee";
+          line.style.paddingBottom = "4px";
+          log.appendChild(line);
         }
 
         if (isAtBottom) log.scrollTop = log.scrollHeight;
 
         clearTimeout(aiSaveTimer);
         aiSaveTimer = setTimeout(() => {
+          if (document.querySelector("button[data-testid*='stop-button']")) return;
+
           const currentHash = getHash(text);
           if (currentHash === lastHash) return;
           lastHash = currentHash;
 
           last.removeAttribute("data-dc-observing");
-          playSound('chatgpt');
-
-          enqueue(async () => {
-            saveLog("チャッピー", text);
-          });
+          saveLog("チャッピー", text);
 
           if (currentUserQuery) {
             const queryToGemini = currentUserQuery;
@@ -308,57 +339,80 @@
             enqueue(async () => {
               await new Promise((resolve) => {
                 callGemini(queryToGemini, text, (reply) => {
-                  playSound('gemini');
-                  appendBubble("Gemini: " + reply, "dc-bubble-gemini");
+                  const dcLog = document.getElementById("dc-log");
+                  if (dcLog) {
+                    const line = document.createElement("div");
+                    line.textContent = "Gemini: " + reply;
+                    line.style.marginBottom = "4px";
+                    line.style.borderBottom = "1px dashed #eee";
+                    line.style.paddingBottom = "4px";
+                    dcLog.appendChild(line);
+                    dcLog.scrollTop = dcLog.scrollHeight;
+                  }
                   saveLog("ジェミー", reply.slice(0, 500));
                   resolve(); 
                 });
               });
             });
           }
-        }, 1500);
+        }, 300); 
       }, 150);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(targetEl, { childList: true, subtree: true });
   }
 
+  // 🛠️ ドラッグ最適化（v14.3.0 完璧安全策版）
   function enableDrag() {
     const box = document.getElementById("dc-root");
     const header = document.getElementById("dc-header");
     let dragging = false; let offsetX = 0; let offsetY = 0;
     
     header.addEventListener("mousedown", (e) => {
-      if (e.target.id === "dc-min") return;
-      dragging = true; offsetX = e.clientX - box.offsetLeft; offsetY = e.clientY - box.offsetTop;
+      // ⚡ 【監督案】closest を使ってコントロール領域全体を確実にガード！
+      if (e.target.closest("#dc-controls")) return;
+      dragging = true; 
+      box.style.transition = "none"; 
+      offsetX = e.clientX - box.offsetLeft; 
+      offsetY = e.clientY - box.offsetTop;
     });
     
-    // 💨 スロットリングでドラッグ処理を間引き
-    const onMouseMove = throttle((e) => {
-      if (!dragging) return;
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return; 
       box.style.left = (e.clientX - offsetX) + "px"; 
       box.style.top = (e.clientY - offsetY) + "px"; 
       box.style.right = "auto";
-    }, 16);
-    
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", () => dragging = false);
-    
-    header.addEventListener("touchstart", (e) => {
-      if (e.target.id === "dc-min") return;
-      dragging = true; const t = e.touches[0]; offsetX = t.clientX - box.offsetLeft; offsetY = t.clientY - box.offsetTop;
     });
     
-    const onTouchMove = throttle((e) => {
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      box.style.transition = "all 0.2s ease"; 
+    });
+    
+    header.addEventListener("touchstart", (e) => {
+      // ⚡ 【監督案】タッチ時も同様に closest で鉄壁ガード！
+      if (e.target.closest("#dc-controls")) return;
+      dragging = true; 
+      box.style.transition = "none"; 
+      const t = e.touches[0]; 
+      offsetX = t.clientX - box.offsetLeft; 
+      offsetY = t.clientY - box.offsetTop;
+    });
+    
+    document.addEventListener("touchmove", (e) => {
       if (!dragging) return; 
       e.preventDefault(); 
       const t = e.touches[0]; 
       box.style.left = (t.clientX - offsetX) + "px"; 
       box.style.top = (t.clientY - offsetY) + "px"; 
       box.style.right = "auto";
-    }, 16);
+    }, { passive: false });
     
-    document.addEventListener("touchmove", onTouchMove, { passive: false });
-    document.addEventListener("touchend", () => dragging = false);
+    document.addEventListener("touchend", () => {
+      if (!dragging) return;
+      dragging = false;
+      box.style.transition = "all 0.2s ease"; 
+    });
   }
 
   function bootstrap() {
@@ -366,7 +420,7 @@
     createUI();
     observeAI();
     const log = document.getElementById("dc-log");
-    if (log) log.innerHTML = '<div style="color:#0a84ff; padding: 4px; font-weight: bold;">🟢 DoubleChat v14.3.1 起動完了</div>';
+    if (log) log.innerHTML = `<div style="color:#0a84ff">🟢 DoubleChat v${DC_VERSION} 起動完了</div>`;
   }
 
   setTimeout(bootstrap, 1500);
